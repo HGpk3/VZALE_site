@@ -2,60 +2,49 @@
 
 import { useEffect } from "react";
 
-declare global {
-  interface Window {
-    onTelegramAuth?: (user: any) => void;
-  }
-}
-
 export default function TelegramLoginButton() {
   useEffect(() => {
-    // создаём скрипт Telegram виджета
+    const containerId = "telegram-login-button-container";
+    const container = document.getElementById(containerId);
+
+    if (!container) return;
+
+    // очищаем контейнер, чтобы не плодить виджеты при hot-reload
+    container.innerHTML = "";
+
     const script = document.createElement("script");
-    script.src = "https://telegram.org/js/telegram-widget.js?22";
     script.async = true;
+    script.src = "https://telegram.org/js/telegram-widget.js?22";
 
-    // ВАЖНО: сюда имя твоего бота БЕЗ @
-    script.setAttribute("data-telegram-login", "vzalebb_bot"); // например: "vzale_bot"
+    // ⚠️ ВАЖНО: здесь должен быть ЮЗЕРНЕЙМ бота БЕЗ @
+    // если бот называется @vzalebb_bot → пишешь "vzalebb_bot"
+    script.setAttribute("data-telegram-login", "vzalebb_bot");
+
     script.setAttribute("data-size", "large");
-    script.setAttribute("data-userpic", "false");
-    script.setAttribute("data-radius", "8");
-    script.setAttribute("data-lang", "ru");
-    script.setAttribute("data-onauth", "onTelegramAuth");
 
-    const container = document.getElementById("telegram-login-container");
-    if (container) {
-      container.innerHTML = "";
-      container.appendChild(script);
-    }
+    // 👉 здесь твой прод-домен на Vercel
+    script.setAttribute(
+      "data-auth-url",
+      "https://vzale-site.vercel.app/api/auth/telegram-redirect"
+    );
 
-    // Функция, которую вызовет Telegram после логина
-    window.onTelegramAuth = async function (user: any) {
-      try {
-        const res = await fetch("/api/auth/telegram", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(user),
-        });
+    // чтобы бот мог писать пользователю
+    script.setAttribute("data-request-access", "write");
 
-        const data = await res.json();
-        if (data.ok) {
-          window.location.href = "/me";
-        } else {
-          console.error("Auth error:", data.error);
-          alert("Ошибка авторизации через Telegram");
-        }
-      } catch (e) {
-        console.error("Auth request failed", e);
-        alert("Ошибка подключения к серверу");
-      }
-    };
+    // можно не показывать аватар, если не хочешь
+    // script.setAttribute("data-userpic", "false");
+
+    container.appendChild(script);
 
     return () => {
-      // очистка
-      window.onTelegramAuth = undefined;
+      container.innerHTML = "";
     };
   }, []);
 
-  return <div id="telegram-login-container" className="flex justify-center" />;
+  return (
+    <div
+      id="telegram-login-button-container"
+      className="flex justify-center"
+    />
+  );
 }
