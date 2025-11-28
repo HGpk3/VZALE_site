@@ -2,42 +2,69 @@
 
 import { useEffect } from "react";
 
+declare global {
+  interface Window {
+    onTelegramAuth?: (user: any) => void;
+  }
+}
+
 export default function TelegramLoginButton() {
   useEffect(() => {
     const containerId = "telegram-login-button-container";
     const container = document.getElementById(containerId);
-
     if (!container) return;
 
-    // очищаем контейнер, чтобы не плодить виджеты при hot-reload
+    // очищаем, чтобы не плодить несколько виджетов при hot-reload
     container.innerHTML = "";
 
     const script = document.createElement("script");
     script.async = true;
     script.src = "https://telegram.org/js/telegram-widget.js?22";
 
-    // ⚠️ ВАЖНО: здесь должен быть ЮЗЕРНЕЙМ бота БЕЗ @
-    // если бот называется @vzalebb_bot → пишешь "vzalebb_bot"
+    // ⚠️ ОБЯЗАТЕЛЬНО: username бота БЕЗ @
+    // Если твой бот в Telegram называется @vzalebb_bot,
+    // то здесь должно быть "vzalebb_bot"
     script.setAttribute("data-telegram-login", "vzalebb_bot");
 
     script.setAttribute("data-size", "large");
-
-    // 👉 здесь твой прод-домен на Vercel
-    script.setAttribute(
-      "data-auth-url",
-      "https://vzale-site.vercel.app/api/auth/telegram-redirect"
-    );
-
-    // чтобы бот мог писать пользователю
+    script.setAttribute("data-userpic", "false");
     script.setAttribute("data-request-access", "write");
 
-    // можно не показывать аватар, если не хочешь
-    // script.setAttribute("data-userpic", "false");
+    // 👉 Ключевой момент: говорим виджету, какую JS-функцию вызвать после логина
+    script.setAttribute("data-onauth", "onTelegramAuth");
 
     container.appendChild(script);
 
+    // регистрируем колбэк в window
+    window.onTelegramAuth = async function (user: any) {
+      // чисто чтобы ты увидела, что оно сработало:
+      alert(`Привет, ${user.first_name || "игрок"}! Telegram ID: ${user.id}`);
+
+      try {
+        // отправляем данные на API, который мы уже делали
+        const res = await fetch("/api/auth/telegram", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(user),
+        });
+
+        const data = await res.json();
+        if (data.ok) {
+          // успешный логин → обновляем страницу личного кабинета
+          window.location.href = "/me";
+        } else {
+          console.error("Auth error:", data.error);
+          alert("Ошибка авторизации на сервере");
+        }
+      } catch (e) {
+        console.error("Auth request failed", e);
+        alert("Не удалось связаться с сервером");
+      }
+    };
+
     return () => {
       container.innerHTML = "";
+      window.onTelegramAuth = undefined;
     };
   }, []);
 
