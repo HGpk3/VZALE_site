@@ -26,7 +26,7 @@ export default function Hero() {
 
       {/* Кнопки */}
       <div className="flex gap-6 mt-10 relative z-10">
-        <Link href="/me">
+        <Link href="/login">
             <button className="bg-black text-white py-3 px-10 rounded-xl text-lg font-semibold transition shadow-lg hover:shadow-[0_0_25px_#A4FF4F]">
             Принять участие
             </button>
