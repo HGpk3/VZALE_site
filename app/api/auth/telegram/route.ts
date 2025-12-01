@@ -1,44 +1,34 @@
-import { NextRequest, NextResponse } from "next/server";
-import { verifyTelegramAuth, TelegramAuthData } from "../../../../lib/telegramAuth";
+import { NextResponse } from "next/server";
 import crypto from "crypto";
 
-export async function POST(req: NextRequest) {
-  const body = (await req.json()) as TelegramAuthData | null;
+// Твой bot token — нужно хранить в .env
+const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN!;
+const SECRET_KEY = crypto.createHash("sha256").update(BOT_TOKEN).digest();
 
-  if (!body) {
-    return NextResponse.json({ ok: false, error: "No data" }, { status: 400 });
+export async function POST(req: Request) {
+  const data = await req.json();
+
+  // 1. Проверяем подпись hash
+  const { hash, ...authData } = data;
+
+  const checkString = Object.keys(authData)
+    .sort()
+    .map((k) => `${k}=${authData[k]}`)
+    .join("\n");
+
+  const hmac = crypto
+    .createHmac("sha256", SECRET_KEY)
+    .update(checkString)
+    .digest("hex");
+
+  if (hmac !== hash) {
+    return NextResponse.json({ ok: false, error: "Invalid hash" }, { status: 403 });
   }
 
-  const isValid = verifyTelegramAuth(body);
+  // 2. Создать/найти пользователя в БД (заглушка)
+  const telegramId = authData.id;
+  // TODO: подключить Prisma/DB и создать пользователя
 
-  if (!isValid) {
-    return NextResponse.json(
-      { ok: false, error: "Invalid auth data" },
-      { status: 401 }
-    );
-  }
-
-  const telegramId = body.id;
-
-  // TODO: тут потом будешь искать/создавать пользователя в БД
-
-  const sessionId = crypto.randomUUID();
-
-  const res = NextResponse.json({ ok: true });
-
-  // кладём сессию в httpOnly-cookie
-  res.cookies.set("vzale_session", sessionId, {
-    httpOnly: true,
-    path: "/",
-    maxAge: 60 * 60 * 24 * 7, // неделя
-  });
-
-  // а сюда — telegram_id (для удобства на этапе разработки)
-  res.cookies.set("vzale_telegram_id", String(telegramId), {
-    httpOnly: false,
-    path: "/",
-    maxAge: 60 * 60 * 24 * 7,
-  });
-
-  return res;
+  // 3. Вернуть успех + куку сессии
+  return NextResponse.json({ ok: true });
 }
