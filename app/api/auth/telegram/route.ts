@@ -1,15 +1,31 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 
-// Твой bot token — нужно хранить в .env
-const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN!;
-const SECRET_KEY = crypto.createHash("sha256").update(BOT_TOKEN).digest();
+function getSecretKey() {
+  const token = process.env.TELEGRAM_BOT_TOKEN;
+
+  if (!token) {
+    console.error("[auth] TELEGRAM_BOT_TOKEN is not set");
+    return null;
+  }
+
+  // делаем ключ только если токен есть
+  return crypto.createHash("sha256").update(token).digest();
+}
 
 export async function POST(req: Request) {
   const data = await req.json();
 
-  // 1. Проверяем подпись hash
-  const { hash, ...authData } = data;
+  // Telegram присылает поле hash + остальные данные
+  const { hash, ...authData } = data as Record<string, string | number>;
+
+  const secretKey = getSecretKey();
+  if (!secretKey) {
+    return NextResponse.json(
+      { ok: false, error: "Auth not configured on server" },
+      { status: 500 }
+    );
+  }
 
   const checkString = Object.keys(authData)
     .sort()
@@ -17,18 +33,19 @@ export async function POST(req: Request) {
     .join("\n");
 
   const hmac = crypto
-    .createHmac("sha256", SECRET_KEY)
+    .createHmac("sha256", secretKey)
     .update(checkString)
     .digest("hex");
 
   if (hmac !== hash) {
-    return NextResponse.json({ ok: false, error: "Invalid hash" }, { status: 403 });
+    return NextResponse.json(
+      { ok: false, error: "Invalid hash" },
+      { status: 403 }
+    );
   }
 
-  // 2. Создать/найти пользователя в БД (заглушка)
   const telegramId = authData.id;
-  // TODO: подключить Prisma/DB и создать пользователя
 
-  // 3. Вернуть успех + куку сессии
-  return NextResponse.json({ ok: true });
+  // тут потом добавим поиск/создание пользователя в БД
+  return NextResponse.json({ ok: true, telegramId });
 }
