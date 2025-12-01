@@ -12,22 +12,43 @@ export type TelegramAuthData = {
   [key: string]: any;
 };
 
-const BOT_TOKEN = process.env.BOT_TOKEN!;
-const SECRET_KEY = crypto.createHash("sha256").update(BOT_TOKEN).digest();
+// Кэшируем ключ, но считаем его только ПОСЛЕ того, как убедились, что env есть
+let secretKey: Buffer | null = null;
+
+function getSecretKey(): Buffer | null {
+  if (secretKey) return secretKey;
+
+  const token = process.env.BOT_TOKEN;
+  if (!token) {
+    console.error(
+      "[telegramAuth] BOT_TOKEN is not set in environment variables"
+    );
+    return null;
+  }
+
+  secretKey = crypto.createHash("sha256").update(token).digest();
+  return secretKey;
+}
 
 /**
  * Проверка подписи данных от Telegram Login Widget
  */
 export function verifyTelegramAuth(data: TelegramAuthData): boolean {
+  const key = getSecretKey();
+  if (!key) {
+    // ключ не смогли получить — считаем авторизацию невалидной, но модуль не падает
+    return false;
+  }
+
   const { hash, ...authData } = data;
 
   const checkString = Object.keys(authData)
     .sort()
-    .map((key) => `${key}=${authData[key]}`)
+    .map((k) => `${k}=${authData[k]}`)
     .join("\n");
 
   const hmac = crypto
-    .createHmac("sha256", SECRET_KEY)
+    .createHmac("sha256", key)
     .update(checkString)
     .digest("hex");
 
@@ -35,7 +56,7 @@ export function verifyTelegramAuth(data: TelegramAuthData): boolean {
     return false;
   }
 
-  // На всякий случай проверим, что данные не супер-старые (1 день)
+  // На всякий случай проверим "свежесть" данных — не старше суток
   const now = Math.floor(Date.now() / 1000);
   if (now - Number(authData.auth_date) > 60 * 60 * 24) {
     return false;
