@@ -1,40 +1,45 @@
+// src/lib/telegramAuth.ts
 import crypto from "crypto";
 
-const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
-
-export interface TelegramAuthData {
+export type TelegramAuthData = {
   id: number;
+  auth_date: number;
   first_name?: string;
   last_name?: string;
   username?: string;
   photo_url?: string;
-  auth_date: string;
   hash: string;
   [key: string]: any;
-}
+};
 
+const BOT_TOKEN = process.env.BOT_TOKEN!;
+const SECRET_KEY = crypto.createHash("sha256").update(BOT_TOKEN).digest();
+
+/**
+ * Проверка подписи данных от Telegram Login Widget
+ */
 export function verifyTelegramAuth(data: TelegramAuthData): boolean {
-  if (!BOT_TOKEN) {
-    console.error("TELEGRAM_BOT_TOKEN is not set");
-    return false;
-  }
+  const { hash, ...authData } = data;
 
-  const { hash, ...userData } = data;
-
-  // Собираем строки "key=value" по алфавиту ключей
-  const checkString = Object.keys(userData)
+  const checkString = Object.keys(authData)
     .sort()
-    .map((key) => `${key}=${userData[key]}`)
+    .map((key) => `${key}=${authData[key]}`)
     .join("\n");
 
-  // secret = sha256(bot_token)
-  const secretKey = crypto.createHash("sha256").update(BOT_TOKEN).digest();
-
-  // hmac = HMAC-SHA256(checkString, secretKey)
   const hmac = crypto
-    .createHmac("sha256", secretKey)
+    .createHmac("sha256", SECRET_KEY)
     .update(checkString)
     .digest("hex");
 
-  return hmac === hash;
+  if (hmac !== hash) {
+    return false;
+  }
+
+  // На всякий случай проверим, что данные не супер-старые (1 день)
+  const now = Math.floor(Date.now() / 1000);
+  if (now - Number(authData.auth_date) > 60 * 60 * 24) {
+    return false;
+  }
+
+  return true;
 }

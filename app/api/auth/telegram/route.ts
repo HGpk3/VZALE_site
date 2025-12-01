@@ -1,51 +1,44 @@
-import { NextResponse } from "next/server";
+// app/api/auth/telegram/route.ts
+import { NextRequest, NextResponse } from "next/server";
+import { verifyTelegramAuth, TelegramAuthData } from "@/lib/telegramAuth";
 import crypto from "crypto";
 
-function getSecretKey() {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
+export async function POST(req: NextRequest) {
+  const body = (await req.json()) as TelegramAuthData | null;
 
-  if (!token) {
-    console.error("[auth] TELEGRAM_BOT_TOKEN is not set");
-    return null;
+  if (!body) {
+    return NextResponse.json({ ok: false, error: "No data" }, { status: 400 });
   }
 
-  // делаем ключ только если токен есть
-  return crypto.createHash("sha256").update(token).digest();
-}
+  const isValid = verifyTelegramAuth(body);
 
-export async function POST(req: Request) {
-  const data = await req.json();
-
-  // Telegram присылает поле hash + остальные данные
-  const { hash, ...authData } = data as Record<string, string | number>;
-
-  const secretKey = getSecretKey();
-  if (!secretKey) {
+  if (!isValid) {
     return NextResponse.json(
-      { ok: false, error: "Auth not configured on server" },
-      { status: 500 }
+      { ok: false, error: "Invalid auth data" },
+      { status: 401 }
     );
   }
 
-  const checkString = Object.keys(authData)
-    .sort()
-    .map((k) => `${k}=${authData[k]}`)
-    .join("\n");
+  const telegramId = body.id;
 
-  const hmac = crypto
-    .createHmac("sha256", secretKey)
-    .update(checkString)
-    .digest("hex");
+  // 👉 здесь потом прикрутим поиск/создание пользователя в БД
+  const sessionId = crypto.randomUUID();
 
-  if (hmac !== hash) {
-    return NextResponse.json(
-      { ok: false, error: "Invalid hash" },
-      { status: 403 }
-    );
-  }
+  const res = NextResponse.json({ ok: true });
 
-  const telegramId = authData.id;
+  // httpOnly-сессия
+  res.cookies.set("vzale_session", sessionId, {
+    httpOnly: true,
+    path: "/",
+    maxAge: 60 * 60 * 24 * 7,
+  });
 
-  // тут потом добавим поиск/создание пользователя в БД
-  return NextResponse.json({ ok: true, telegramId });
+  // удобная кука с Telegram ID (видна на клиенте)
+  res.cookies.set("vzale_telegram_id", String(telegramId), {
+    httpOnly: false,
+    path: "/",
+    maxAge: 60 * 60 * 24 * 7,
+  });
+
+  return res;
 }
