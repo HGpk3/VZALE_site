@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import TelegramLoginButton from "../components/Auth/TelegramLoginButton";
+import { redirect } from "next/navigation";
 
 const mockUser = {
   name: "Элена",
@@ -38,39 +38,16 @@ const mockStats = {
   mvps: 3,
 };
 
-// 👇 делаем страницу async
+// Личный кабинет /me
 export default async function MePage() {
-  // 👇 ждём cookies()
   const cookieStore = await cookies();
   const telegramId = cookieStore.get("vzale_telegram_id")?.value;
 
-  // ====== СЦЕНАРИЙ: НЕ ЗАЛОГИНЕН (НЕТ КУКИ) ======
+  // Если не залогинен — уводим на /login
   if (!telegramId) {
-    return (
-      <main className="min-h-screen w-full bg-gradient-to-b from-[#0B0615] via-[#050309] to-black text-white flex items-center justify-center px-6">
-        <div className="max-w-md w-full bg-white/5 border border-white/10 rounded-3xl p-8 shadow-[0_20px_60px_rgba(0,0,0,0.7)] space-y-4 text-center">
-          <h1 className="text-2xl md:text-3xl font-extrabold mb-2">
-            Вход в личный кабинет
-          </h1>
-          <p className="text-sm md:text-base text-white/70">
-            Войди через Telegram, чтобы увидеть свои команды, турниры и
-            статистику в VZALE.
-          </p>
-
-          <div className="mt-4 flex justify-center">
-            <TelegramLoginButton />
-          </div>
-
-          <p className="text-[11px] md:text-xs text-white/50 mt-3">
-            Мы используем только твой Telegram ID и имя. Данные не передаются
-            третьим лицам.
-          </p>
-        </div>
-      </main>
-    );
+    redirect("/login");
   }
 
-  // ====== СЦЕНАРИЙ: УЖЕ ЗАЛОГИНЕН (КУКА ЕСТЬ) ======
   return (
     <main className="min-h-screen w-full bg-gradient-to-b from-[#0B0615] via-[#050309] to-black text-white py-16 md:py-20 px-6 md:px-10">
       {/* Неоновый фон */}
@@ -96,6 +73,9 @@ export default async function MePage() {
               </h1>
               <p className="text-xs md:text-sm text-white/70 mt-1">
                 {mockUser.role} · {mockUser.status}
+              </p>
+              <p className="text-[11px] text-white/50 mt-1">
+                Telegram ID: {telegramId}
               </p>
             </div>
           </div>
