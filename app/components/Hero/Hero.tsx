@@ -37,6 +37,11 @@ export default function Hero() {
             Список турниров
             </button>
         </Link>
+        <Link href="/me">
+            <button className="border-2 border-white/30 text-white py-3 px-10 rounded-xl text-lg font-semibold transition hover:bg-white/10 hover:shadow-[0_0_20px_rgba(255,255,255,0.25)]">
+            Личный кабинет
+            </button>
+        </Link>
         </div>
 
 

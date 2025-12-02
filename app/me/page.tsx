@@ -1,4 +1,5 @@
 // app/me/page.tsx
+import Link from "next/link";
 import { cookies } from "next/headers";
 import { getDb } from "@/lib/db";
 
@@ -238,6 +239,24 @@ export default async function MePage() {
         <div className="pointer-events-none absolute inset-0 opacity-50">
           <div className="absolute -top-20 left-10 w-[260px] h-[220px] bg-vz_purple blur-[120px]" />
           <div className="absolute bottom-0 right-0 w-[320px] h-[240px] bg-vz_green blur-[140px]" />
+        </div>
+
+        <div className="relative z-10 flex items-center justify-between flex-wrap gap-3">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white hover:bg-white/10 transition"
+          >
+            <span aria-hidden>←</span>
+            <span>На главную</span>
+          </Link>
+          <a
+            href="https://t.me/vzalebb_bot"
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-2 rounded-full bg-vz_green px-4 py-2 text-sm font-semibold text-black hover:brightness-110 transition"
+          >
+            Управление в боте
+          </a>
         </div>
 
         <header className="relative z-10 space-y-4">
