@@ -1,11 +1,35 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { TournamentOption } from "./TournamentSignup";
 
 interface AdminPanelProps {
   tournaments: TournamentOption[];
 }
+
+type TeamWithRoster = {
+  id: number;
+  name: string;
+  tournamentId: number | null;
+  members: {
+    userId: number;
+    fullName: string | null;
+  }[];
+};
+
+type PlayerRow = {
+  userId: string;
+  teamId: string;
+  points: string;
+  threes: string;
+  assists: string;
+  rebounds: string;
+  steals: string;
+  blocks: string;
+  fouls: string;
+  turnovers: string;
+  minutes: string;
+};
 
 const statusLabels: Record<string, string> = {
   draft: "Черновик",
@@ -33,15 +57,18 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
     tournamentId: tournaments[0]?.id?.toString() || "",
     stage: "",
     status: "finished",
-    teamHomeName: "",
-    teamAwayName: "",
+    teamHomeId: "",
+    teamAwayId: "",
     scoreHome: "",
     scoreAway: "",
   });
-  const [playerStats, setPlayerStats] = useState([
+  const [teams, setTeams] = useState<TeamWithRoster[]>([]);
+  const [teamRosters, setTeamRosters] = useState<Record<number, TeamWithRoster["members"]>>({});
+  const [teamsLoading, setTeamsLoading] = useState(false);
+  const [playerStats, setPlayerStats] = useState<PlayerRow[]>([
     {
       userId: "",
-      teamName: "",
+      teamId: "",
       points: "",
       threes: "",
       assists: "",
@@ -53,6 +80,123 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
       minutes: "",
     },
   ]);
+  const lastLoadedTournamentId = useRef<string | null>(null);
+
+  useEffect(() => {
+    const loadTeams = async (tournamentId: string) => {
+      if (!tournamentId) {
+        setTeams([]);
+        setTeamRosters({});
+        return;
+      }
+
+      setTeamsLoading(true);
+      try {
+        const res = await fetch(
+          `/api/admin/matches/options?tournamentId=${tournamentId}`
+        );
+        const data = await res.json();
+        if (!res.ok || !data?.ok) {
+          throw new Error(data?.error || "Не удалось загрузить команды");
+        }
+
+        const rosterMap: Record<number, TeamWithRoster["members"]> = {};
+        (data.teams as TeamWithRoster[]).forEach((team) => {
+          rosterMap[team.id] = team.members;
+        });
+
+        setTeams(data.teams as TeamWithRoster[]);
+        setTeamRosters(rosterMap);
+
+        setMatchForm((prev) => {
+          let nextHome = prev.teamHomeId;
+          let nextAway = prev.teamAwayId;
+
+          if (data.teams?.length) {
+            const firstTeam = data.teams[0];
+            if (
+              !nextHome ||
+              !data.teams.some((t: TeamWithRoster) => t.id.toString() === nextHome)
+            ) {
+              nextHome = firstTeam.id.toString();
+            }
+
+            if (
+              !nextAway ||
+              nextAway === nextHome ||
+              !data.teams.some((t: TeamWithRoster) => t.id.toString() === nextAway)
+            ) {
+              const alt = (data.teams as TeamWithRoster[]).find(
+                (t) => t.id.toString() !== nextHome
+              );
+              nextAway = alt ? alt.id.toString() : "";
+            }
+          } else {
+            nextHome = "";
+            nextAway = "";
+          }
+
+          return { ...prev, teamHomeId: nextHome, teamAwayId: nextAway };
+        });
+
+        setPlayerStats((prev) => {
+          const hasData = prev.some(
+            (ps) =>
+              ps.userId ||
+              ps.points ||
+              ps.assists ||
+              ps.rebounds ||
+              ps.steals ||
+              ps.blocks ||
+              ps.threes ||
+              ps.fouls ||
+              ps.turnovers ||
+              ps.minutes
+          );
+
+          if (hasData) return prev;
+
+          const autoRows: PlayerRow[] = [];
+          const addRoster = (teamId: string) => {
+            if (!teamId) return;
+            const roster = rosterMap[Number(teamId)] || [];
+            roster.forEach((player) => {
+              autoRows.push({
+                userId: player.userId.toString(),
+                teamId,
+                points: "",
+                threes: "",
+                assists: "",
+                rebounds: "",
+                steals: "",
+                blocks: "",
+                fouls: "",
+                turnovers: "",
+                minutes: "",
+              });
+            });
+          };
+
+          addRoster(matchForm.teamHomeId || data.teams?.[0]?.id?.toString() || "");
+          addRoster(matchForm.teamAwayId || data.teams?.[1]?.id?.toString() || "");
+
+          return autoRows.length ? autoRows : prev;
+        });
+      } catch (err) {
+        console.error("[admin] failed to load teams", err);
+      } finally {
+        setTeamsLoading(false);
+      }
+    };
+
+    const tournamentId = matchForm.tournamentId || tournaments[0]?.id?.toString();
+    if (!tournamentId) return;
+
+    if (lastLoadedTournamentId.current === tournamentId) return;
+    lastLoadedTournamentId.current = tournamentId;
+
+    loadTeams(tournamentId);
+  }, [matchForm.tournamentId, matchForm.teamAwayId, matchForm.teamHomeId, tournaments]);
 
   async function createTournament(e: React.FormEvent) {
     e.preventDefault();
@@ -118,7 +262,11 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
   ) {
     setPlayerStats((prev) => {
       const next = [...prev];
-      next[index] = { ...next[index], [field]: value };
+      next[index] = {
+        ...next[index],
+        [field]: value,
+        ...(field === "teamId" ? { userId: "" } : {}),
+      };
       return next;
     });
   }
@@ -128,7 +276,7 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
       ...prev,
       {
         userId: "",
-        teamName: "",
+        teamId: matchForm.teamHomeId || matchForm.teamAwayId || "",
         points: "",
         threes: "",
         assists: "",
@@ -146,16 +294,52 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
     setPlayerStats((prev) => prev.filter((_, i) => i !== index));
   }
 
+  function autofillRosters() {
+    const rows: PlayerRow[] = [];
+    const addRoster = (teamId: string) => {
+      if (!teamId) return;
+      const roster = teamRosters[Number(teamId)] || [];
+      roster.forEach((player) => {
+        rows.push({
+          userId: player.userId.toString(),
+          teamId,
+          points: "",
+          threes: "",
+          assists: "",
+          rebounds: "",
+          steals: "",
+          blocks: "",
+          fouls: "",
+          turnovers: "",
+          minutes: "",
+        });
+      });
+    };
+
+    addRoster(matchForm.teamHomeId);
+    addRoster(matchForm.teamAwayId);
+
+    if (rows.length === 0) return;
+    setPlayerStats(rows);
+  }
+
   async function submitMatch(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setMessage(null);
     setMatchLoading(true);
     try {
+      const teamHome = teams.find((t) => t.id.toString() === matchForm.teamHomeId);
+      const teamAway = teams.find((t) => t.id.toString() === matchForm.teamAwayId);
+
+      if (!teamHome || !teamAway) {
+        throw new Error("Выберите обе команды из списка турнира");
+      }
+
       const preparedStats = playerStats
         .map((ps) => ({
           userId: ps.userId.trim(),
-          teamName: ps.teamName.trim(),
+          teamId: ps.teamId.trim(),
           points: ps.points.trim(),
           threes: ps.threes.trim(),
           assists: ps.assists.trim(),
@@ -166,7 +350,7 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
           turnovers: ps.turnovers.trim(),
           minutes: ps.minutes.trim(),
         }))
-        .filter((ps) => ps.userId && ps.teamName);
+        .filter((ps) => ps.userId && ps.teamId);
 
       const res = await fetch("/api/admin/matches", {
         method: "POST",
@@ -174,12 +358,16 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
         body: JSON.stringify({
           ...matchForm,
           tournamentId: Number(matchForm.tournamentId),
+          teamHomeName: teamHome.name,
+          teamAwayName: teamAway.name,
           scoreHome:
             matchForm.scoreHome === "" ? null : Number(matchForm.scoreHome),
           scoreAway:
             matchForm.scoreAway === "" ? null : Number(matchForm.scoreAway),
           playerStats: preparedStats.map((ps) => ({
             ...ps,
+            teamName:
+              teams.find((t) => t.id.toString() === ps.teamId)?.name || "",
             userId: Number(ps.userId),
             points: ps.points === "" ? 0 : Number(ps.points),
             threes: ps.threes === "" ? 0 : Number(ps.threes),
@@ -204,15 +392,15 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
         tournamentId: tournaments[0]?.id?.toString() || "",
         stage: "",
         status: "finished",
-        teamHomeName: "",
-        teamAwayName: "",
+        teamHomeId: "",
+        teamAwayId: "",
         scoreHome: "",
         scoreAway: "",
       });
       setPlayerStats([
         {
           userId: "",
-          teamName: "",
+          teamId: "",
           points: "",
           threes: "",
           assists: "",
@@ -379,9 +567,29 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
             <span className="text-white/70">Турнир</span>
             <select
               value={matchForm.tournamentId}
-              onChange={(e) =>
-                setMatchForm((prev) => ({ ...prev, tournamentId: e.target.value }))
-              }
+              onChange={(e) => {
+                setMatchForm((prev) => ({
+                  ...prev,
+                  tournamentId: e.target.value,
+                  teamHomeId: "",
+                  teamAwayId: "",
+                }));
+                setPlayerStats([
+                  {
+                    userId: "",
+                    teamId: "",
+                    points: "",
+                    threes: "",
+                    assists: "",
+                    rebounds: "",
+                    steals: "",
+                    blocks: "",
+                    fouls: "",
+                    turnovers: "",
+                    minutes: "",
+                  },
+                ]);
+              }}
               required
               className="rounded-xl bg-black/30 border border-white/15 px-3 py-2 text-white text-sm focus:border-vz_green focus:outline-none"
             >
@@ -412,26 +620,44 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
         <div className="grid gap-3 md:grid-cols-2">
           <label className="flex flex-col gap-2 text-sm">
             <span className="text-white/70">Домашняя команда</span>
-            <input
-              value={matchForm.teamHomeName}
+            <select
+              value={matchForm.teamHomeId}
               onChange={(e) =>
-                setMatchForm((prev) => ({ ...prev, teamHomeName: e.target.value }))
+                setMatchForm((prev) => ({ ...prev, teamHomeId: e.target.value }))
               }
               required
               className="rounded-xl bg-black/30 border border-white/15 px-3 py-2 text-white text-sm focus:border-vz_green focus:outline-none"
-            />
+            >
+              <option value="" className="bg-black" disabled>
+                Выберите команду
+              </option>
+              {teams.map((team) => (
+                <option key={team.id} value={team.id} className="bg-black">
+                  {team.name}
+                </option>
+              ))}
+            </select>
           </label>
 
           <label className="flex flex-col gap-2 text-sm">
             <span className="text-white/70">Гостевая команда</span>
-            <input
-              value={matchForm.teamAwayName}
+            <select
+              value={matchForm.teamAwayId}
               onChange={(e) =>
-                setMatchForm((prev) => ({ ...prev, teamAwayName: e.target.value }))
+                setMatchForm((prev) => ({ ...prev, teamAwayId: e.target.value }))
               }
               required
               className="rounded-xl bg-black/30 border border-white/15 px-3 py-2 text-white text-sm focus:border-vz_green focus:outline-none"
-            />
+            >
+              <option value="" className="bg-black" disabled>
+                Выберите команду
+              </option>
+              {teams.map((team) => (
+                <option key={team.id} value={team.id} className="bg-black">
+                  {team.name}
+                </option>
+              ))}
+            </select>
           </label>
         </div>
 
@@ -485,39 +711,78 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h4 className="text-base font-semibold">Статистика игроков</h4>
-            <button
-              type="button"
-              onClick={addPlayerRow}
-              className="text-xs px-3 py-1 rounded-full border border-white/20 hover:border-vz_green hover:text-vz_green transition"
-            >
-              + Добавить игрока
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={autofillRosters}
+                className="text-xs px-3 py-1 rounded-full border border-white/20 hover:border-vz_green hover:text-vz_green transition"
+              >
+                Автозаполнить состав
+              </button>
+              <button
+                type="button"
+                onClick={addPlayerRow}
+                className="text-xs px-3 py-1 rounded-full border border-white/20 hover:border-vz_green hover:text-vz_green transition"
+              >
+                + Добавить игрока
+              </button>
+            </div>
           </div>
+
+          <p className="text-xs text-white/60">
+            Команды и ростеры подтягиваются из выбранного турнира. Можно
+            скорректировать статистику перед сохранением, не вводя ID вручную.
+          </p>
+          {teamsLoading && (
+            <p className="text-xs text-vz_green">Обновляем список команд и игроков...</p>
+          )}
 
           <div className="space-y-2">
             {playerStats.map((row, index) => (
               <div
                 key={index}
-                className="grid gap-2 md:grid-cols-[1fr,1.5fr,repeat(5,1fr)] items-end rounded-xl border border-white/10 bg-black/30 p-3"
+                className="grid gap-2 md:grid-cols-[1.1fr,1.4fr,repeat(5,1fr)] items-end rounded-xl border border-white/10 bg-black/30 p-3"
               >
                 <label className="flex flex-col gap-1 text-xs">
-                  <span className="text-white/60">User ID</span>
-                  <input
-                    value={row.userId}
-                    onChange={(e) => updateStatField(index, "userId", e.target.value)}
+                  <span className="text-white/60">Команда</span>
+                  <select
+                    value={row.teamId}
+                    onChange={(e) => updateStatField(index, "teamId", e.target.value)}
                     className="rounded-lg bg-black/20 border border-white/15 px-2 py-1 text-white text-sm focus:border-vz_green focus:outline-none"
-                    placeholder="Telegram ID"
-                  />
+                  >
+                    <option value="" className="bg-black">
+                      Выберите команду
+                    </option>
+                    {teams.map((team) => (
+                      <option key={team.id} value={team.id} className="bg-black">
+                        {team.name}
+                      </option>
+                    ))}
+                  </select>
                 </label>
 
                 <label className="flex flex-col gap-1 text-xs">
-                  <span className="text-white/60">Команда</span>
-                  <input
-                    value={row.teamName}
-                    onChange={(e) => updateStatField(index, "teamName", e.target.value)}
+                  <span className="text-white/60">Игрок</span>
+                  <select
+                    value={row.userId}
+                    onChange={(e) => updateStatField(index, "userId", e.target.value)}
                     className="rounded-lg bg-black/20 border border-white/15 px-2 py-1 text-white text-sm focus:border-vz_green focus:outline-none"
-                    placeholder="Название как в матче"
-                  />
+                  >
+                    <option value="" className="bg-black">
+                      Выберите игрока
+                    </option>
+                    {(teamRosters[Number(row.teamId)] || [])
+                      .filter((p) => p.userId)
+                      .map((player) => (
+                        <option
+                          key={`${row.teamId}-${player.userId}`}
+                          value={player.userId}
+                          className="bg-black"
+                        >
+                          {player.fullName || "Игрок"} (ID {player.userId})
+                        </option>
+                      ))}
+                  </select>
                 </label>
 
                 <label className="flex flex-col gap-1 text-xs">

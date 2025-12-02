@@ -34,11 +34,24 @@ type PaymentRow = {
   paid: number;
 };
 
+type AchievementRow = {
+  code: string;
+  title: string;
+  description: string;
+  emoji: string | null;
+  tier: string;
+  orderIndex: number;
+  awardedAt: string | null;
+  tournamentId: number | null;
+  tournamentName: string | null;
+};
+
 type ProfileData = {
   fullName: string | null;
   memberships: TeamMembership[];
   freeAgentProfiles: FreeAgentProfile[];
   payments: PaymentRow[];
+  achievements: AchievementRow[];
 };
 
 type TournamentRow = {
@@ -56,6 +69,41 @@ function safeJsonParse<T>(value: string | null): T | null {
   } catch (err) {
     console.error("[profile] failed to parse json", err);
     return null;
+  }
+}
+
+function achievementTierLabel(tier: string) {
+  switch (tier) {
+    case "hard":
+      return "Хард";
+    case "medium":
+      return "Средний";
+    default:
+      return "Лайт";
+  }
+}
+
+function achievementColor(tier: string) {
+  switch (tier) {
+    case "hard":
+      return "border-amber-300/40 text-amber-200 bg-amber-500/10";
+    case "medium":
+      return "border-vz_purple/40 text-vz_purple bg-vz_purple/15";
+    default:
+      return "border-vz_green/40 text-vz_green bg-vz_green/15";
+  }
+}
+
+function formatAwardedDate(value: string | null) {
+  if (!value) return "";
+  try {
+    return new Date(value).toLocaleDateString("ru-RU", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+  } catch {
+    return value;
   }
 }
 
@@ -131,10 +179,10 @@ function getProfileData(telegramId: number): ProfileData {
   const payments = db
     .prepare(
       `
-      SELECT
-        pp.tournament_id AS tournamentId,
-        t.name           AS tournamentName,
-        pp.paid          AS paid
+        SELECT
+          pp.tournament_id AS tournamentId,
+          t.name           AS tournamentName,
+          pp.paid          AS paid
       FROM player_payments pp
       LEFT JOIN tournaments t ON t.id = pp.tournament_id
       WHERE pp.user_id = ?
@@ -142,11 +190,34 @@ function getProfileData(telegramId: number): ProfileData {
     )
     .all(telegramId) as PaymentRow[];
 
+  const achievements = db
+    .prepare(
+      `
+      SELECT
+        a.code,
+        a.title,
+        a.description,
+        a.emoji,
+        a.tier,
+        a.order_index AS orderIndex,
+        pa.awarded_at AS awardedAt,
+        pa.tournament_id AS tournamentId,
+        t.name AS tournamentName
+      FROM player_achievements pa
+      JOIN achievements a ON a.id = pa.achievement_id
+      LEFT JOIN tournaments t ON t.id = pa.tournament_id
+      WHERE pa.user_id = ?
+      ORDER BY COALESCE(pa.awarded_at, '') DESC, a.order_index ASC
+    `
+    )
+    .all(telegramId) as AchievementRow[];
+
   return {
     fullName: fullNameRow?.full_name ?? null,
     memberships,
     freeAgentProfiles,
     payments,
+    achievements,
   };
 }
 
@@ -531,6 +602,73 @@ export default async function MePage() {
             </div>
           </section>
         )}
+
+        <section className="relative z-10 space-y-4">
+          <div>
+            <p className="text-xs uppercase tracking-[0.2em] text-white/60">
+              Ачивки
+            </p>
+            <h2 className="text-xl md:text-2xl font-semibold">Ваши награды</h2>
+            <p className="text-sm text-white/70 max-w-2xl">
+              Все награды подтянуты из бота. Видно, за какой турнир и когда была
+              получена каждая ачивка.
+            </p>
+          </div>
+
+          {profile.achievements.length === 0 ? (
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-5 text-sm text-white/70">
+              Пока нет полученных ачивок. Играйте матчи и выполняйте условия в
+              турнирах VZALE, чтобы собрать коллекцию наград.
+            </div>
+          ) : (
+            <div className="grid gap-3 md:grid-cols-2">
+              {profile.achievements.map((ach, idx) => (
+                <div
+                  key={`${ach.code}-${idx}-${ach.tournamentId ?? "global"}`}
+                  className="rounded-2xl border border-white/10 bg-white/5 p-5 space-y-3"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-white/10 border border-white/15 flex items-center justify-center text-xl">
+                        {ach.emoji || "🏆"}
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.18em] text-white/60">
+                          {ach.tournamentName || "Глобальная"}
+                        </p>
+                        <h3 className="text-lg font-semibold">{ach.title}</h3>
+                      </div>
+                    </div>
+                    <span
+                      className={`text-[11px] px-3 py-1 rounded-full border font-semibold ${achievementColor(
+                        ach.tier
+                      )}`}
+                    >
+                      {achievementTierLabel(ach.tier)}
+                    </span>
+                  </div>
+
+                  <p className="text-sm text-white/75 leading-relaxed">
+                    {ach.description}
+                  </p>
+
+                  <div className="flex items-center justify-between text-xs text-white/60">
+                    <span>
+                      {ach.tournamentId
+                        ? `Турнир #${ach.tournamentId}`
+                        : "Глобальная награда"}
+                    </span>
+                    {ach.awardedAt && (
+                      <span className="font-mono text-white/70">
+                        {formatAwardedDate(ach.awardedAt)}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
 
         {adminMode && (
           <section className="relative z-10 space-y-4">
