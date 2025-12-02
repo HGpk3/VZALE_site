@@ -2,6 +2,9 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { getDb } from "@/lib/db";
+import { isAdmin } from "@/lib/admin";
+import { TournamentSignup, TournamentOption } from "./components/TournamentSignup";
+import { AdminPanel } from "./components/AdminPanel";
 
 type TeamMembership = {
   teamId: number;
@@ -36,6 +39,14 @@ type ProfileData = {
   memberships: TeamMembership[];
   freeAgentProfiles: FreeAgentProfile[];
   payments: PaymentRow[];
+};
+
+type TournamentRow = {
+  id: number;
+  name: string;
+  status: string;
+  dateStart: string | null;
+  venue: string | null;
 };
 
 function safeJsonParse<T>(value: string | null): T | null {
@@ -139,6 +150,15 @@ function getProfileData(telegramId: number): ProfileData {
   };
 }
 
+function getTournaments(): TournamentRow[] {
+  const db = getDb();
+  return db
+    .prepare(
+      "SELECT id, name, status, date_start as dateStart, venue FROM tournaments ORDER BY id DESC"
+    )
+    .all() as TournamentRow[];
+}
+
 function tournamentStatusLabel(status?: string | null) {
   switch (status) {
     case "running":
@@ -218,6 +238,11 @@ export default async function MePage() {
   }
 
   const profile = getProfileData(telegramId);
+  const tournaments = getTournaments();
+  const openTournaments = tournaments.filter(
+    (t) => t.status === "registration_open"
+  ) as TournamentOption[];
+  const adminMode = isAdmin(telegramId);
 
   const tournamentsFromTeams = profile.memberships
     .map((m) => m.tournamentId)
@@ -313,6 +338,29 @@ export default async function MePage() {
               Активные анкеты из бота: обновите описание или выключите в боте
             </p>
           </div>
+        </section>
+
+        <section className="relative z-10 space-y-4">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-xs uppercase tracking-[0.2em] text-white/60">
+                Регистрация
+              </p>
+              <h2 className="text-xl md:text-2xl font-semibold">
+                Записаться на турнир
+              </h2>
+            </div>
+            <a
+              href="https://t.me/vzalebb_bot"
+              target="_blank"
+              rel="noreferrer"
+              className="hidden md:inline-flex items-center justify-center px-4 py-2 rounded-xl bg-white/10 border border-white/15 text-sm hover:bg-white/15 transition"
+            >
+              Сделать это в боте
+            </a>
+          </div>
+
+          <TournamentSignup openTournaments={openTournaments} />
         </section>
 
         <section className="relative z-10 space-y-4">
@@ -481,6 +529,26 @@ export default async function MePage() {
                 </div>
               ))}
             </div>
+          </section>
+        )}
+
+        {adminMode && (
+          <section className="relative z-10 space-y-4">
+            <div>
+              <p className="text-xs uppercase tracking-[0.2em] text-white/60">
+                Панель админа
+              </p>
+              <h2 className="text-xl md:text-2xl font-semibold">
+                Создание и управление турнирами
+              </h2>
+              <p className="text-sm text-white/70 max-w-2xl">
+                Все действия пишутся в ту же базу, что и бот. Можно открыть или
+                закрыть регистрацию, создать новый турнир и управлять статусами
+                без Telegram.
+              </p>
+            </div>
+
+            <AdminPanel tournaments={tournaments} />
           </section>
         )}
       </div>

@@ -26,8 +26,8 @@ export default function Hero() {
 
       {/* Кнопки */}
       <div className="flex gap-6 mt-10 relative z-10">
-        <Link href="/login">
-            <button className="bg-black text-white py-3 px-10 rounded-xl text-lg font-semibold transition shadow-lg hover:shadow-[0_0_25px_#A4FF4F]">
+        <Link href="/participate">
+            <button className="bg-vz_green text-black py-3 px-10 rounded-xl text-lg font-semibold transition shadow-[0_20px_60px_rgba(0,0,0,0.35)] hover:brightness-110">
             Принять участие
             </button>
         </Link>
@@ -38,7 +38,7 @@ export default function Hero() {
             </button>
         </Link>
         <Link href="/me">
-            <button className="border-2 border-white/30 text-white py-3 px-10 rounded-xl text-lg font-semibold transition hover:bg-white/10 hover:shadow-[0_0_20px_rgba(255,255,255,0.25)]">
+            <button className="bg-white/15 border-2 border-white/25 text-white py-3 px-10 rounded-xl text-lg font-semibold transition hover:bg-white/25 hover:shadow-[0_12px_35px_rgba(0,0,0,0.25)]">
             Личный кабинет
             </button>
         </Link>
