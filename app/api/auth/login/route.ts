@@ -1,8 +1,12 @@
-// app/api/auth/login/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
+
+interface WebUserRow {
+  telegram_id: number;
+  password_hash: string;
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -18,10 +22,8 @@ export async function POST(req: NextRequest) {
     const db = getDb();
 
     const row = db
-      .prepare(
-        "SELECT telegram_id, password_hash FROM web_users WHERE username = ?"
-      )
-      .get(username);
+      .prepare("SELECT telegram_id, password_hash FROM web_users WHERE username = ?")
+      .get(username) as WebUserRow | undefined;
 
     if (!row) {
       return NextResponse.json(
@@ -30,7 +32,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const valid = await bcrypt.compare(password, row.password_hash as string);
+    const valid = await bcrypt.compare(password, row.password_hash);
 
     if (!valid) {
       return NextResponse.json(
