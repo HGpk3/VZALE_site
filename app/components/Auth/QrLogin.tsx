@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useState } from "react";
 
 type StartResponse = {
@@ -68,11 +69,14 @@ export default function QrLogin() {
       {qrUrl && (
         <div className="flex flex-col items-center gap-2">
           {/* самый простой вариант: внешнее API, можно потом заменить на свою генерацию */}
-          <img
+          <Image
             src={`https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(
               qrUrl
             )}`}
             alt="QR для входа через Telegram"
+            width={240}
+            height={240}
+            className="rounded-xl border border-white/10 shadow-lg"
           />
           <p className="text-sm text-white/80 text-center">
             Отсканируй QR камерой телефона → откроется бот → нажми Start.

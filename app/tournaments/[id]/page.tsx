@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 type TournamentStatus = "upcoming" | "in_progress" | "finished";
 
 interface TournamentDetails {
@@ -85,12 +87,12 @@ export default function TournamentPage({
           <p className="text-sm text-neutral-700 mb-4">
             Возможно, этот турнир ещё не добавлен или ссылка неверна.
           </p>
-          <a
+          <Link
             href="/tournaments"
             className="inline-flex items-center justify-center px-5 py-2 rounded-xl bg-vz_purple_dark text-white text-sm font-semibold hover:bg-vz_purple transition"
           >
             Вернуться к списку турниров
-          </a>
+          </Link>
         </div>
       </main>
     );
