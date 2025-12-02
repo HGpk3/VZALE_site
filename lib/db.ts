@@ -1,16 +1,29 @@
 // src/lib/db.ts
 import Database from "better-sqlite3";
+import fs from "fs";
 import path from "path";
 
 let db: Database.Database | null = null;
 
+function resolveDbPath() {
+  const envPath = process.env.DB_PATH?.trim();
+  if (envPath) return envPath;
+
+  const botDb = path.join(process.cwd(), "VZALE_BOT", "tournament.db");
+  if (fs.existsSync(botDb)) return botDb;
+
+  // запасной вариант — пустая база в корне проекта, если бот ещё не положил свою
+  return path.join(process.cwd(), "tournament.db");
+}
+
 function initDatabase() {
-  // 👉 ОБЯЗАТЕЛЬНО проверь путь, чтобы он совпадал с тем,
-  // где реально лежит tournament.db у бота
-  const dbPath =
-    process.env.DB_PATH ||
-    "C:/Users/User/Desktop/Site_VZALE/vzale-site/VZALE_BOT/tournament.db"
-  console.log("[DB] using database file:", dbPath);
+  const dbPath = resolveDbPath();
+
+  if (!fs.existsSync(dbPath)) {
+    console.warn("[DB] database file not found, will create new one at:", dbPath);
+  } else {
+    console.log("[DB] using database file:", dbPath);
+  }
 
   const instance = new Database(dbPath);
 

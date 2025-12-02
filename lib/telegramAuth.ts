@@ -9,7 +9,6 @@ export type TelegramAuthData = {
   username?: string;
   photo_url?: string;
   hash: string;
-  [key: string]: any;
 };
 
 // Кэшируем ключ, но считаем его только ПОСЛЕ того, как убедились, что env есть
@@ -44,7 +43,7 @@ export function verifyTelegramAuth(data: TelegramAuthData): boolean {
 
   const checkString = Object.keys(authData)
     .sort()
-    .map((k) => `${k}=${authData[k]}`)
+    .map((key) => `${key}=${(authData as Record<string, string | number | undefined>)[key]}`)
     .join("\n");
 
   const hmac = crypto
