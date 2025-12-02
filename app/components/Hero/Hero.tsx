@@ -38,7 +38,7 @@ export default function Hero() {
             </button>
         </Link>
         <Link href="/me">
-            <button className="bg-white/15 border-2 border-white/25 text-white py-3 px-10 rounded-xl text-lg font-semibold transition hover:bg-white/25 hover:shadow-[0_12px_35px_rgba(0,0,0,0.25)]">
+            <button className="bg-vz_purple text-white py-3 px-10 rounded-xl text-lg font-semibold transition hover:bg-vz_green hover:text-black hover:shadow-[0_12px_35px_rgba(0,0,0,0.25)]">
             Личный кабинет
             </button>
         </Link>
