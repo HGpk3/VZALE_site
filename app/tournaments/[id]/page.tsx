@@ -201,9 +201,23 @@ function getTeams(tournamentId: number): TeamWithRoster[] {
       if (team.name) merged.set(team.name, team);
     });
     teams = Array.from(merged.values()).sort((a, b) => a.name.localeCompare(b.name));
+
+    // Если и так не нашли, показываем общий список команд из таблицы teams,
+    // как это делает бот.
+    if (teams.length === 0) {
+      teams = db
+        .prepare(
+          `
+            SELECT DISTINCT team_name AS name, 0 AS paid
+            FROM teams
+            ORDER BY team_name ASC
+          `,
+        )
+        .all() as TeamRow[];
+    }
   }
 
-  const rosterRows = db
+  let rosterRows = db
     .prepare(
       `
         SELECT
@@ -217,6 +231,26 @@ function getTeams(tournamentId: number): TeamWithRoster[] {
       `,
     )
     .all(tournamentId) as RosterRow[];
+
+  // Для старых записей подтягиваем составы из той же таблицы teams, что использует бот.
+  if (rosterRows.length === 0 && teams.length > 0) {
+    rosterRows = db
+      .prepare(
+        `
+          SELECT
+            team_name AS teamName,
+            member_id AS userId,
+            member_name AS fullName,
+            0 AS isCaptain
+          FROM teams
+          WHERE team_name IN (
+            SELECT DISTINCT team_name FROM teams
+          )
+          ORDER BY team_name ASC, member_name ASC
+        `,
+      )
+      .all() as RosterRow[];
+  }
 
   const rosterMap = new Map<string, RosterRow[]>();
   for (const row of rosterRows) {
