@@ -12,10 +12,11 @@ export type TournamentOption = {
 
 interface Props {
   openTournaments: TournamentOption[];
+  previousTeam?: { name: string; members: TeamMemberRow[] } | null;
 }
 
-export function TournamentSignup({ openTournaments }: Props) {
-  const [teamName, setTeamName] = useState("");
+export function TournamentSignup({ openTournaments, previousTeam }: Props) {
+  const [teamName, setTeamName] = useState(previousTeam?.name || "");
   const [teamTournamentId, setTeamTournamentId] = useState<number | undefined>(
     openTournaments[0]?.id
   );
@@ -56,10 +57,13 @@ export function TournamentSignup({ openTournaments }: Props) {
       if (!res.ok || !data?.ok) {
         throw new Error(data?.error || "Не удалось зарегистрировать команду");
       }
+      const copiedInfo = data.copiedMembers
+        ? ` · подтянули ${data.copiedMembers} игрок(ов) из прошлой команды`
+        : "";
       setMessage(
         data.inviteCode
-          ? `Команда создана! Инвайт-код: ${data.inviteCode}`
-          : "Команда создана"
+          ? `Команда создана! Инвайт-код: ${data.inviteCode}${copiedInfo}`
+          : `Команда создана${copiedInfo}`
       );
       setTeamName("");
     } catch (err) {
@@ -143,7 +147,31 @@ export function TournamentSignup({ openTournaments }: Props) {
             <p className="text-sm text-white/70">
               Сразу после создания команда появится в базе. Остальные игроки
               смогут подключиться по инвайт-коду или через бота.
+              {previousTeam?.members?.length
+                ? " Мы возьмём состав из вашей прошлой заявки и добавим его автоматически."
+                : ""}
             </p>
+            {previousTeam?.members?.length ? (
+              <div className="mt-3 rounded-xl border border-white/10 bg-black/30 p-3 text-xs text-white/70 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-semibold text-white">Прошлая команда</span>
+                  <span className="rounded-full border border-white/15 px-2 py-0.5 text-[11px]">
+                    {previousTeam.members.length} игроков
+                  </span>
+                </div>
+                <ul className="space-y-1">
+                  {previousTeam.members.map((m) => (
+                    <li key={m.userId} className="flex items-center justify-between gap-2">
+                      <span>{m.fullName || `Игрок #${m.userId}`}</span>
+                      <span className="text-white/50">{m.role === "captain" ? "Капитан" : "Игрок"}</span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="text-[11px] text-white/50">
+                  Состав будет скопирован в новую заявку, его можно дополнять по инвайт-ссылке.
+                </p>
+              </div>
+            ) : null}
           </div>
 
           <label className="flex flex-col gap-2 text-sm">
@@ -243,3 +271,4 @@ export function TournamentSignup({ openTournaments }: Props) {
     </div>
   );
 }
+import type { TeamMemberRow } from "@/lib/tournaments";

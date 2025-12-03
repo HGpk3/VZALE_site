@@ -72,6 +72,30 @@ export async function POST(req: NextRequest) {
       "INSERT OR IGNORE INTO team_members (team_id, user_id, role, status, tournament_id) VALUES (?, ?, 'captain', 'confirmed', ?)"
     ).run(newTeamId, telegramId, tournamentId);
 
+    let copiedMembers = 0;
+    const lastTeam = db
+      .prepare(
+        "SELECT id FROM teams_new WHERE captain_user_id = ? AND id <> ? ORDER BY id DESC LIMIT 1"
+      )
+      .get(telegramId, newTeamId) as { id: number } | undefined;
+
+    if (lastTeam) {
+      const members = db
+        .prepare(
+          "SELECT user_id as userId, role, status FROM team_members WHERE team_id = ? AND user_id <> ?"
+        )
+        .all(lastTeam.id, telegramId) as { userId: number; role: string; status: string }[];
+
+      const insertMember = db.prepare(
+        "INSERT OR IGNORE INTO team_members (team_id, user_id, role, status, tournament_id) VALUES (?, ?, ?, COALESCE(?, 'confirmed'), ?)"
+      );
+
+      for (const member of members) {
+        insertMember.run(newTeamId, member.userId, member.role || "player", member.status || "pending", tournamentId);
+        copiedMembers += 1;
+      }
+    }
+
     const inviteCode = crypto.randomBytes(3).toString("hex");
     try {
       db.prepare(
@@ -81,7 +105,7 @@ export async function POST(req: NextRequest) {
       console.warn("[register-team] failed to create invite code", err);
     }
 
-    return NextResponse.json({ ok: true, teamId: newTeamId, inviteCode });
+    return NextResponse.json({ ok: true, teamId: newTeamId, inviteCode, copiedMembers });
   } catch (err) {
     console.error("[register-team]", err);
     return NextResponse.json(

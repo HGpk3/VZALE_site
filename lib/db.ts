@@ -9,11 +9,19 @@ function resolveDbPath() {
   const envPath = process.env.DB_PATH?.trim();
   if (envPath) return envPath;
 
-  const botDb = path.join(process.cwd(), "VZALE_BOT", "tournament.db");
-  if (fs.existsSync(botDb)) return botDb;
+  const candidates = [
+    path.join(process.cwd(), "VZALE_BOT", "tournament.db"),
+    path.join(process.cwd(), "tournament.db"),
+    path.join(__dirname, "..", "VZALE_BOT", "tournament.db"),
+    path.join(__dirname, "..", "..", "VZALE_BOT", "tournament.db"),
+  ];
+
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
 
   // запасной вариант — пустая база в корне проекта, если бот ещё не положил свою
-  return path.join(process.cwd(), "tournament.db");
+  return candidates[0];
 }
 
 function initDatabase() {

@@ -3,8 +3,12 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { getDb } from "@/lib/db";
 import { isAdmin } from "@/lib/admin";
+import {
+  fetchAllTournaments,
+  fetchLastTeamForCaptain,
+  TournamentRow as TournamentDbRow,
+} from "@/lib/tournaments";
 import { TournamentSignup, TournamentOption } from "./components/TournamentSignup";
-import { AdminPanel } from "./components/AdminPanel";
 
 type TeamMembership = {
   teamId: number;
@@ -67,14 +71,6 @@ type ProfileData = {
   achievements: AchievementRow[];
   globalRating: RatingRow | null;
   tournamentRatings: TournamentRatingRow[];
-};
-
-type TournamentRow = {
-  id: number;
-  name: string;
-  status: string;
-  dateStart: string | null;
-  venue: string | null;
 };
 
 function safeJsonParse<T>(value: string | null): T | null {
@@ -264,15 +260,6 @@ function getProfileData(telegramId: number): ProfileData {
   };
 }
 
-function getTournaments(): TournamentRow[] {
-  const db = getDb();
-  return db
-    .prepare(
-      "SELECT id, name, status, date_start as dateStart, venue FROM tournaments ORDER BY id DESC"
-    )
-    .all() as TournamentRow[];
-}
-
 function tournamentStatusLabel(status?: string | null) {
   switch (status) {
     case "running":
@@ -352,11 +339,12 @@ export default async function MePage() {
   }
 
   const profile = getProfileData(telegramId);
-  const tournaments = getTournaments();
+  const tournaments = fetchAllTournaments() as TournamentDbRow[];
   const openTournaments = tournaments.filter(
     (t) => t.status === "registration_open"
   ) as TournamentOption[];
   const adminMode = isAdmin(telegramId);
+  const previousTeam = fetchLastTeamForCaptain(telegramId);
 
   const tournamentsFromTeams = profile.memberships
     .map((m) => m.tournamentId)
@@ -399,6 +387,14 @@ export default async function MePage() {
           >
             Управление в боте
           </a>
+          {adminMode && (
+            <Link
+              href="/admin"
+              className="inline-flex items-center gap-2 rounded-full bg-vz_purple px-4 py-2 text-sm font-semibold text-white shadow-lg hover:bg-vz_green hover:text-black transition"
+            >
+              Отдельная админка
+            </Link>
+          )}
         </div>
 
         <header className="relative z-10 space-y-4">
@@ -488,7 +484,10 @@ export default async function MePage() {
             </a>
           </div>
 
-          <TournamentSignup openTournaments={openTournaments} />
+          <TournamentSignup
+            openTournaments={openTournaments}
+            previousTeam={previousTeam}
+          />
         </section>
 
         <section className="relative z-10 space-y-4">
@@ -806,21 +805,24 @@ export default async function MePage() {
 
         {adminMode && (
           <section className="relative z-10 space-y-4">
-            <div>
-              <p className="text-xs uppercase tracking-[0.2em] text-white/60">
-                Панель админа
-              </p>
-              <h2 className="text-xl md:text-2xl font-semibold">
-                Создание и управление турнирами
-              </h2>
-              <p className="text-sm text-white/70 max-w-2xl">
-                Все действия пишутся в ту же базу, что и бот. Можно открыть или
-                закрыть регистрацию, создать новый турнир и управлять статусами
-                без Telegram.
-              </p>
+            <div className="rounded-2xl border border-vz_purple/25 bg-vz_purple/10 p-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div className="space-y-2">
+                <p className="text-xs uppercase tracking-[0.2em] text-white/70">
+                  Админ
+                </p>
+                <h3 className="text-lg font-semibold">Отдельная панель управления</h3>
+                <p className="text-sm text-white/70 max-w-2xl">
+                  Все инструменты создания турниров, матчей и статусов вынесены в отдельную страницу,
+                  чтобы не прокручивать личный кабинет до самого низа.
+                </p>
+              </div>
+              <Link
+                href="/admin"
+                className="inline-flex items-center justify-center rounded-xl bg-vz_green px-4 py-2 text-sm font-semibold text-black hover:brightness-110 transition"
+              >
+                Открыть админку
+              </Link>
             </div>
-
-            <AdminPanel tournaments={tournaments} />
           </section>
         )}
       </div>
