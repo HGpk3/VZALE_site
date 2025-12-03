@@ -1,9 +1,17 @@
 import Link from "next/link";
+import { Manrope } from "next/font/google";
 import type { Metadata } from "next";
 import { cookies } from "next/headers";
 
 import { isAdmin } from "@/lib/admin";
 import "./globals.css";   // ← ВОТ ЭТО ОЧЕНЬ ВАЖНО
+
+const manrope = Manrope({
+  subsets: ["cyrillic", "latin"],
+  weight: ["400", "500", "600", "700", "800"],
+  variable: "--font-manrope",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "VZALE",
@@ -36,7 +44,7 @@ export default async function RootLayout({
 }) {
   return (
     <html lang="ru">
-      <body>
+      <body className={manrope.className}>
         {await AdminShortcut()}
         {children}
       </body>

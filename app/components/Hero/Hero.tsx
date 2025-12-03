@@ -1,10 +1,8 @@
 import Link from "next/link";
 
-
 export default function Hero() {
   return (
     <section className="relative min-h-screen w-full overflow-hidden bg-vz-gradient flex flex-col items-center justify-center text-center px-6">
-
       {/* Неоновые мазки (салатовые) */}
       <div className="pointer-events-none absolute inset-0 opacity-40">
         <div className="absolute top-20 left-10 w-[600px] h-[200px] bg-vz_green blur-[90px] rotate-[12deg] opacity-40"></div>
@@ -25,27 +23,29 @@ export default function Hero() {
       </p>
 
       {/* Кнопки */}
-      <div className="flex gap-6 mt-10 relative z-10">
+      <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 mt-10 relative z-10">
         <Link href="/participate">
-            <button className="bg-vz_green text-black py-3 px-10 rounded-xl text-lg font-semibold transition shadow-[0_20px_60px_rgba(0,0,0,0.35)] hover:brightness-110">
-            Принять участие
-            </button>
+          <button className="group inline-flex items-center justify-center gap-2 rounded-full bg-gradient-to-r from-vz_purple to-vz_green px-8 py-3 text-lg font-semibold text-black shadow-[0_20px_60px_rgba(0,0,0,0.35)] transition hover:from-[#7d5cff] hover:to-[#b2ff6c]">
+            <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/80 text-vz_purple font-bold shadow-inner">
+              →
+            </span>
+            <span className="leading-tight text-left">Принять участие</span>
+          </button>
         </Link>
 
         <Link href="/tournaments">
-            <button className="border-2 border-vz_green text-vz_text py-3 px-10 rounded-xl text-lg font-semibold transition hover:bg-vz_purple hover:text-white hover:shadow-xl">
-            Список турниров
-            </button>
+          <button className="inline-flex items-center justify-center gap-2 rounded-full border-2 border-white/70 bg-white/10 px-8 py-3 text-lg font-semibold text-white backdrop-blur transition hover:border-vz_green hover:bg-white/20 hover:text-vz_green">
+            <span className="h-2 w-2 rounded-full bg-vz_green shadow-[0_0_0_6px_rgba(80,255,144,0.25)]"></span>
+            <span>Список турниров</span>
+          </button>
         </Link>
         <Link href="/me">
-            <button className="bg-vz_purple text-white py-3 px-10 rounded-xl text-lg font-semibold transition hover:bg-vz_green hover:text-black hover:shadow-[0_12px_35px_rgba(0,0,0,0.25)]">
-            Личный кабинет
-            </button>
+          <button className="inline-flex items-center justify-center gap-2 rounded-full bg-white text-vz_purple px-8 py-3 text-lg font-semibold shadow-[0_12px_35px_rgba(0,0,0,0.25)] transition hover:-translate-y-0.5 hover:bg-vz_green hover:text-black">
+            <span className="h-2 w-2 rounded-full bg-vz_purple shadow-[0_0_0_6px_rgba(114,60,255,0.25)]"></span>
+            <span>Личный кабинет</span>
+          </button>
         </Link>
-        </div>
-
-
-
+      </div>
     </section>
   );
 }
