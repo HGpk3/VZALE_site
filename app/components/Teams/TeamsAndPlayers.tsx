@@ -11,13 +11,13 @@ type TeamRow = {
 type PlayerRow = {
   userId: number;
   fullName: string | null;
-  points: number;
+  rating: number;
   games: number;
 };
 
 function getLatestTournamentId(): number | null {
   const db = getDb();
-  // Берём самый свежий турнир, в котором уже есть команды или статистика игроков.
+  // Берём самый свежий турнир, в котором уже есть команды или рейтинги игроков.
   // Так мы не показываем пустую карточку, если последний турнир ещё не заполнен.
   const populated = db
     .prepare(
@@ -25,9 +25,9 @@ function getLatestTournamentId(): number | null {
         SELECT t.id
         FROM tournaments t
         LEFT JOIN teams_new tn ON tn.tournament_id = t.id
-        LEFT JOIN player_stats ps ON ps.tournament_id = t.id
+        LEFT JOIN player_ratings_by_tournament prt ON prt.tournament_id = t.id
         GROUP BY t.id
-        HAVING COUNT(tn.id) > 0 OR COUNT(ps.user_id) > 0
+        HAVING COUNT(tn.id) > 0 OR COUNT(prt.user_id) > 0
         ORDER BY
           CASE WHEN t.status = 'running' THEN 1 ELSE 0 END DESC,
           CASE WHEN t.status = 'registration_open' THEN 1 ELSE 0 END DESC,
@@ -90,12 +90,12 @@ function getTopPlayers(tournamentId: number | null): PlayerRow[] {
           SELECT
             ps.user_id AS userId,
             u.full_name AS fullName,
-            ps.points,
+            ps.rating,
             ps.games
-          FROM player_stats ps
+          FROM player_ratings_by_tournament ps
           LEFT JOIN users u ON u.user_id = ps.user_id
           WHERE ps.tournament_id = ?
-          ORDER BY ps.points DESC
+          ORDER BY ps.rating DESC
           LIMIT 5
         `
       )
@@ -108,7 +108,7 @@ function getTopPlayers(tournamentId: number | null): PlayerRow[] {
         SELECT
           pr.user_id AS userId,
           u.full_name AS fullName,
-          pr.rating AS points,
+          pr.rating,
           pr.games
         FROM player_ratings pr
         LEFT JOIN users u ON u.user_id = pr.user_id
@@ -125,8 +125,8 @@ export default function TeamsAndPlayers() {
   const players = getTopPlayers(tournamentId);
 
   const tournamentHint = tournamentId
-    ? "Последний турнир"
-    : "Рейтинги по всем играм";
+    ? "RP по последнему турниру"
+    : "Глобальный рейтинг RP";
 
   function teamStatusLabel(status: string | null) {
     switch (status) {
@@ -216,6 +216,9 @@ export default function TeamsAndPlayers() {
             <h3 className="text-lg md:text-xl font-semibold mb-2">
               Топ игроки
             </h3>
+            <p className="text-sm text-white/60 -mt-2">
+              Сортировка по рейтингу RP бота — учитываем победы, личную статистику и разницу счёта.
+            </p>
 
             <div className="rounded-2xl bg-white/5 border border-white/10 shadow-[0_16px_50px_rgba(0,0,0,0.6)] overflow-hidden">
               <div className="px-5 py-3 border-b border-white/10 text-xs md:text-sm uppercase tracking-[0.18em] text-white/60">
@@ -230,7 +233,7 @@ export default function TeamsAndPlayers() {
                 ) : (
                   players.map((p, index) => (
                     <li
-                      key={`${p.userId}-${p.points}`}
+                      key={`${p.userId}-${p.rating}`}
                       className="flex items-center justify-between px-5 py-3 md:py-4"
                     >
                       <div className="flex items-center gap-3">
@@ -245,7 +248,7 @@ export default function TeamsAndPlayers() {
                         </div>
                       </div>
                       <span className="text-sm md:text-base font-semibold text-vz_green">
-                        {p.points}
+                        {p.rating.toFixed(1)} RP
                       </span>
                     </li>
                   ))

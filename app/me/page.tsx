@@ -34,6 +34,19 @@ type PaymentRow = {
   paid: number;
 };
 
+type RatingRow = {
+  rating: number;
+  games: number;
+  updatedAt: string | null;
+};
+
+type TournamentRatingRow = {
+  tournamentId: number;
+  tournamentName: string | null;
+  rating: number;
+  games: number;
+};
+
 type AchievementRow = {
   code: string;
   title: string;
@@ -52,6 +65,8 @@ type ProfileData = {
   freeAgentProfiles: FreeAgentProfile[];
   payments: PaymentRow[];
   achievements: AchievementRow[];
+  globalRating: RatingRow | null;
+  tournamentRatings: TournamentRatingRow[];
 };
 
 type TournamentRow = {
@@ -212,12 +227,40 @@ function getProfileData(telegramId: number): ProfileData {
     )
     .all(telegramId) as AchievementRow[];
 
+  const globalRating = db
+    .prepare(
+      `
+      SELECT rating, games, updated_at AS updatedAt
+      FROM player_ratings
+      WHERE user_id = ?
+    `
+    )
+    .get(telegramId) as RatingRow | undefined;
+
+  const tournamentRatings = db
+    .prepare(
+      `
+      SELECT
+        prt.tournament_id AS tournamentId,
+        t.name AS tournamentName,
+        prt.rating,
+        prt.games
+      FROM player_ratings_by_tournament prt
+      LEFT JOIN tournaments t ON t.id = prt.tournament_id
+      WHERE prt.user_id = ?
+      ORDER BY prt.rating DESC
+    `
+    )
+    .all(telegramId) as TournamentRatingRow[];
+
   return {
     fullName: fullNameRow?.full_name ?? null,
     memberships,
     freeAgentProfiles,
     payments,
     achievements,
+    globalRating: globalRating ?? null,
+    tournamentRatings,
   };
 }
 
@@ -328,6 +371,9 @@ export default async function MePage() {
   ]);
 
   const activeFreeAgents = profile.freeAgentProfiles.filter((f) => f.isActive);
+  const ratingUpdatedAt = profile.globalRating?.updatedAt
+    ? formatAwardedDate(profile.globalRating.updatedAt)
+    : null;
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-[#0b0615] via-[#05030a] to-black text-white px-4 py-12 md:py-16">
@@ -383,7 +429,7 @@ export default async function MePage() {
           </div>
         </header>
 
-        <section className="relative z-10 grid gap-4 md:grid-cols-3">
+        <section className="relative z-10 grid gap-4 md:grid-cols-4">
           <div className="rounded-2xl border border-white/10 bg-white/5 p-5 shadow-xl">
             <p className="text-sm text-white/60">Команды</p>
             <div className="text-3xl font-bold mt-2">{profile.memberships.length}</div>
@@ -407,6 +453,17 @@ export default async function MePage() {
             <div className="text-3xl font-bold mt-2">{activeFreeAgents.length}</div>
             <p className="text-xs text-white/60 mt-1">
               Активные анкеты из бота: обновите описание или выключите в боте
+            </p>
+          </div>
+          <div className="rounded-2xl border border-vz_purple/20 bg-white/5 p-5 shadow-xl">
+            <p className="text-sm text-white/60">Рейтинг</p>
+            <div className="text-3xl font-bold mt-2 text-vz_green">
+              {profile.globalRating ? `${profile.globalRating.rating.toFixed(1)} RP` : "нет игр"}
+            </div>
+            <p className="text-xs text-white/60 mt-1">
+              {profile.globalRating
+                ? `Матчей: ${profile.globalRating.games}${ratingUpdatedAt ? ` · обновлено ${ratingUpdatedAt}` : ""}`
+                : "Появится после первого сыгранного матча"}
             </p>
           </div>
         </section>
@@ -568,6 +625,83 @@ export default async function MePage() {
               ))}
             </div>
           )}
+        </section>
+
+        <section className="relative z-10 space-y-4">
+          <div className="space-y-2">
+            <p className="text-xs uppercase tracking-[0.2em] text-white/60">
+              Рейтинг игрока
+            </p>
+            <h2 className="text-xl md:text-2xl font-semibold">Как считаем RP</h2>
+            <p className="text-sm text-white/70 max-w-3xl leading-relaxed">
+              Рейтинг пересчитывается ботом после каждого завершённого матча. Все
+              стартуют с <span className="font-semibold text-white">1000 RP</span>,
+              дальше добавляются очки за победу команды (+20), снимаются за поражение (-5),
+              и начисляются за личную статистику: +2 за очко, +3 за ассист, +4 за блок.
+              Победившая команда получает дополнительный бонус за разницу счёта
+              (по +1 каждые 5 очков) и +5 RP у лучшего бомбардира матча. Эти же правила
+              применяются для глобального рейтинга и рейтингов конкретных турниров.
+            </p>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-5 shadow-[0_16px_50px_rgba(0,0,0,0.5)] space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.18em] text-white/60">За всё время</p>
+                  <h3 className="text-xl font-semibold">
+                    {profile.globalRating ? `${profile.globalRating.rating.toFixed(1)} RP` : "Ещё нет игр"}
+                  </h3>
+                </div>
+                <span className="text-xs px-3 py-1 rounded-full border border-white/15 bg-white/5 text-white/70">
+                  {profile.globalRating ? `${profile.globalRating.games} игр` : "старт 1000 RP"}
+                </span>
+              </div>
+              {ratingUpdatedAt && (
+                <p className="text-xs text-white/50">Обновлено {ratingUpdatedAt}</p>
+              )}
+              {!profile.globalRating && (
+                <p className="text-sm text-white/70">
+                  Сыграйте любой матч, чтобы рейтинг начал расти.
+                </p>
+              )}
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-5 shadow-[0_16px_50px_rgba(0,0,0,0.5)] space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs uppercase tracking-[0.18em] text-white/60">По турнирам</p>
+                  <h3 className="text-lg font-semibold">Отдельные рейтинги</h3>
+                </div>
+                <span className="text-xs px-3 py-1 rounded-full border border-white/15 bg-white/5 text-white/70">
+                  {profile.tournamentRatings.length} записей
+                </span>
+              </div>
+
+              {profile.tournamentRatings.length === 0 ? (
+                <p className="text-sm text-white/70">
+                  Как только вы сыграете матчи в турнире, здесь появится его RP.
+                </p>
+              ) : (
+                <div className="space-y-2 max-h-64 overflow-auto pr-1">
+                  {profile.tournamentRatings.map((rt) => (
+                    <div
+                      key={rt.tournamentId}
+                      className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm"
+                    >
+                      <div className="flex flex-col">
+                        <span className="font-semibold">
+                          {rt.tournamentName || `Турнир #${rt.tournamentId}`}
+                        </span>
+                        <span className="text-xs text-white/60">Матчей: {rt.games}</span>
+                      </div>
+                      <span className="font-semibold text-vz_green">{rt.rating.toFixed(1)} RP</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
         </section>
 
         {profile.payments.length > 0 && (
