@@ -17,7 +17,30 @@ type PlayerRow = {
 
 function getLatestTournamentId(): number | null {
   const db = getDb();
-  const row = db
+  // Берём самый свежий турнир, в котором уже есть команды или статистика игроков.
+  // Так мы не показываем пустую карточку, если последний турнир ещё не заполнен.
+  const populated = db
+    .prepare(
+      `
+        SELECT t.id
+        FROM tournaments t
+        LEFT JOIN teams_new tn ON tn.tournament_id = t.id
+        LEFT JOIN player_stats ps ON ps.tournament_id = t.id
+        GROUP BY t.id
+        HAVING COUNT(tn.id) > 0 OR COUNT(ps.user_id) > 0
+        ORDER BY
+          CASE WHEN t.status = 'running' THEN 1 ELSE 0 END DESC,
+          CASE WHEN t.status = 'registration_open' THEN 1 ELSE 0 END DESC,
+          t.id DESC
+        LIMIT 1
+      `
+    )
+    .get() as { id: number } | undefined;
+
+  if (populated?.id) return populated.id;
+
+  // Если нет турниров с данными, падаем обратно на самый свежий по статусу/дате.
+  const fallback = db
     .prepare(
       `
         SELECT id
@@ -31,7 +54,7 @@ function getLatestTournamentId(): number | null {
     )
     .get() as { id: number } | undefined;
 
-  return row?.id ?? null;
+  return fallback?.id ?? null;
 }
 
 function getTeams(tournamentId: number | null): TeamRow[] {
