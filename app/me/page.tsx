@@ -62,6 +62,20 @@ type StatsSummary = {
   lastUpdated: string | null;
 };
 
+type PlayerMatchRow = {
+  matchId: number;
+  tournamentId: number | null;
+  teamName: string | null;
+  points: number | null;
+  assists: number | null;
+  rebounds: number | null;
+  threes: number | null;
+  scoreHome: number | null;
+  scoreAway: number | null;
+  stage: string | null;
+  groupName: string | null;
+};
+
 type AchievementRow = {
   code: string;
   title: string;
@@ -452,10 +466,16 @@ function getProfileData(telegramId: number): ProfileData {
     })[];
 
   const recentMatches: RecentMatchRow[] = recentMatchRows.map((row) => {
-    const isHome = row.teamHomeName === row.teamName;
+    const teamName = row.teamName ?? "Без названия";
+    const isHome = (row.teamHomeName ?? "") === teamName;
     const opponent = isHome ? row.teamAwayName : row.teamHomeName;
+    const opponentName = opponent ?? "Соперник уточняется";
     const scoreHome = row.scoreHome ?? null;
     const scoreAway = row.scoreAway ?? null;
+    const points = row.points ?? 0;
+    const assists = row.assists ?? 0;
+    const rebounds = row.rebounds ?? 0;
+    const threes = row.threes ?? 0;
     let result: "win" | "loss" | "pending" = "pending";
 
     if (scoreHome !== null && scoreAway !== null) {
@@ -473,15 +493,15 @@ function getProfileData(telegramId: number): ProfileData {
       stage: row.stage,
       groupName: row.groupName,
       startAt: row.startAt,
-      teamName: row.teamName,
-      opponentName: opponent || "Соперник уточняется",
+      teamName,
+      opponentName,
       scoreHome,
       scoreAway,
       isHome,
-      points: row.points,
-      assists: row.assists,
-      rebounds: row.rebounds,
-      threes: row.threes,
+      points,
+      assists,
+      rebounds,
+      threes,
       result,
     };
   });

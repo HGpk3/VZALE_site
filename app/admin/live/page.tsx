@@ -17,7 +17,10 @@ export default async function LiveStatsPage() {
     redirect("/me");
   }
 
-  const tournaments = fetchAllTournaments();
+  const tournaments = fetchAllTournaments().map((t) => ({
+    ...t,
+    status: t.status ?? undefined,
+  }));
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-[#0b0615] via-[#05030a] to-black text-white px-4 py-12 md:py-16">

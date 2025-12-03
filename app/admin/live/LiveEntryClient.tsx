@@ -24,6 +24,8 @@ type PlayerStat = {
   minutes: number;
 };
 
+type NumericStatKey = Exclude<keyof PlayerStat, "userId" | "fullName" | "teamName">;
+
 type LiveMatch = {
   id: number;
   tournamentId: number;
@@ -54,7 +56,7 @@ const emptyStats = (teamName: string) =>
     minutes: 0,
   } satisfies Omit<PlayerStat, "userId" | "fullName">);
 
-const statButtons: { key: keyof PlayerStat; label: string; value: number }[] = [
+const statButtons: { key: NumericStatKey; label: string; value: number }[] = [
   { key: "points", label: "+1", value: 1 },
   { key: "points", label: "+2", value: 2 },
   { key: "points", label: "+3", value: 3 },
@@ -176,7 +178,7 @@ export function LiveEntryClient({
   const addStat = (
     userId: number,
     teamName: string,
-    field: keyof PlayerStat,
+    field: NumericStatKey,
     value: number
   ) => {
     setPlayerStats((prev) => {
@@ -186,7 +188,8 @@ export function LiveEntryClient({
         ...emptyStats(teamName),
       };
 
-      const nextValue = (current[field] || 0) + value;
+      const currentValue = typeof current[field] === "number" ? current[field] : 0;
+      const nextValue = currentValue + value;
       const updated: PlayerStat = {
         ...current,
         teamName,

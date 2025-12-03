@@ -523,7 +523,7 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
                   <p className="text-sm text-white/60">Турнир #{t.id}</p>
                   <h4 className="text-base font-semibold">{t.name}</h4>
                   <p className="text-xs text-white/60">
-                    {statusLabels[t.status] || t.status}
+                    {(t.status ? statusLabels[t.status] || t.status : "Без статуса")}
                     {t.dateStart ? ` • ${t.dateStart}` : ""}
                   </p>
                 </div>
