@@ -335,14 +335,21 @@ export default function TournamentPage({ params }: { params: { id: string } }) {
   if (Number.isNaN(id)) return notFound();
 
   const row = fetchTournament(id);
-  if (!row) return notFound();
 
-  const status = normalizeStatus(row.status) ?? "draft";
-  const settings = parseSettings(row.settingsJson);
+  // Если записи турнира нет (например, в базе сохранились только матчи/составы),
+  // всё равно показываем страницу по id и рендерим команды/матчи из БД.
+  // 404 отдаём только если совсем нет данных.
+  const fallbackTeams = getTeams(id);
+  const hasAnyData = !!row || fallbackTeams.length > 0 || getMatches(id).length > 0;
+
+  if (!hasAnyData) return notFound();
+
+  const status = normalizeStatus(row?.status ?? null) ?? "draft";
+  const settings = row ? parseSettings(row.settingsJson) : null;
   const canRegister = status === "registration_open";
   const matches = getMatches(id);
   const playerStatsMap = getPlayerStatsMap(id);
-  const teams = getTeams(id);
+  const teams = row ? getTeams(id) : fallbackTeams;
 
   function matchStatusBadge(value: string | null) {
     switch (value) {
@@ -368,14 +375,14 @@ export default function TournamentPage({ params }: { params: { id: string } }) {
         {/* Хедер турнира */}
         <header className="space-y-4">
           <p className="text-xs md:text-sm uppercase tracking-[0.22em] text-white/70">
-            Турнир VZALE #{row.id}
+            Турнир VZALE #{row?.id ?? id}
           </p>
-          <h1 className="text-3xl md:text-4xl font-extrabold">{row.name}</h1>
+          <h1 className="text-3xl md:text-4xl font-extrabold">{row?.name ?? `Турнир #${id}`}</h1>
 
           <div className="flex flex-wrap items-center gap-3 text-sm md:text-base text-white/80">
-            {row.dateStart && <span>{row.dateStart}</span>}
-            {row.dateStart && row.venue && <span className="text-white/60">•</span>}
-            {row.venue && <span>{row.venue}</span>}
+            {row?.dateStart && <span>{row.dateStart}</span>}
+            {row?.dateStart && row?.venue && <span className="text-white/60">•</span>}
+            {row?.venue && <span>{row.venue}</span>}
           </div>
 
           <span
