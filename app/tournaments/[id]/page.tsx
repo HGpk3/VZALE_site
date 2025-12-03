@@ -157,7 +157,7 @@ function getMatches(tournamentId: number): MatchRow[] {
 function getTeams(tournamentId: number): TeamWithRoster[] {
   const db = getDb();
 
-  const teams = db
+  let teams = db
     .prepare(
       `
         SELECT name, paid
@@ -167,6 +167,41 @@ function getTeams(tournamentId: number): TeamWithRoster[] {
       `,
     )
     .all(tournamentId) as TeamRow[];
+
+  // Для старых турниров, где таблица имен команд могла не заполняться, собираем названия
+  // из заявок и матчей, чтобы страница не была пустой.
+  if (teams.length === 0) {
+    const rosterTeams = db
+      .prepare(
+        `
+          SELECT DISTINCT team_name AS name, 0 AS paid
+          FROM tournament_roster
+          WHERE tournament_id = ?
+          ORDER BY name ASC
+        `,
+      )
+      .all(tournamentId) as TeamRow[];
+
+    const matchTeams = db
+      .prepare(
+        `
+          SELECT DISTINCT team_home_name AS name, 0 AS paid
+          FROM matches_simple
+          WHERE tournament_id = ?
+          UNION
+          SELECT DISTINCT team_away_name AS name, 0 AS paid
+          FROM matches_simple
+          WHERE tournament_id = ?
+        `,
+      )
+      .all(tournamentId, tournamentId) as TeamRow[];
+
+    const merged = new Map<string, TeamRow>();
+    [...rosterTeams, ...matchTeams].forEach((team) => {
+      if (team.name) merged.set(team.name, team);
+    });
+    teams = Array.from(merged.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }
 
   const rosterRows = db
     .prepare(
