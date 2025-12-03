@@ -279,7 +279,7 @@ export default function TeamsAndPlayers({
   const hasMoreTeams = !showAllTeams && teams.length === teamsLimit;
 
   return (
-    <section className="relative w-full py-20 md:py-24 px-6 md:px-10 bg-gradient-to-b from-[#0B0615] via-[#050309] to-black text-white">
+    <section className="relative w-full py-16 md:py-24 px-4 sm:px-6 md:px-10 bg-gradient-to-b from-[#0B0615] via-[#050309] to-black text-white">
       <div className="pointer-events-none absolute inset-0 opacity-40">
         <div className="absolute -top-10 left-0 w-[280px] h-[200px] bg-vz_purple blur-[110px]" />
         <div className="absolute bottom-0 right-10 w-[260px] h-[220px] bg-vz_green blur-[110px]" />
@@ -297,8 +297,8 @@ export default function TeamsAndPlayers({
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-3 text-xs md:text-sm text-white/70">
-            <span className="font-mono bg-white/5 border border-white/10 px-3 py-1 rounded-full">
+          <div className="flex flex-wrap gap-3 text-xs md:text-sm text-white/70 justify-start md:justify-end">
+            <span className="font-mono bg-white/5 border border-white/10 px-3 py-1 rounded-full whitespace-nowrap">
               {tournamentOptions.length} турниров в базе
             </span>
             <Link
@@ -310,15 +310,15 @@ export default function TeamsAndPlayers({
           </div>
         </div>
 
-        <div className="grid gap-8 md:grid-cols-2">
+        <div className="grid gap-8 lg:grid-cols-2">
           <div className="space-y-4">
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
               <div>
                 <h3 className="text-lg md:text-xl font-semibold mb-1">Команды</h3>
                 <p className="text-xs text-white/60">Берём составы прямо из текущих заявок бота.</p>
               </div>
-              <form method="get" className="flex items-center gap-2 text-xs">
-                <label className="text-white/60" htmlFor="teams-select">
+              <form method="get" className="flex flex-wrap items-center gap-2 text-xs">
+                <label className="text-white/60 whitespace-nowrap" htmlFor="teams-select">
                   Турнир
                 </label>
                 <input
@@ -334,7 +334,7 @@ export default function TeamsAndPlayers({
                   id="teams-select"
                   name="teamTournament"
                   defaultValue={selectedTeamsTournamentId ?? ""}
-                  className="bg-white/10 border border-white/20 rounded-lg px-3 py-1 text-sm text-white focus:outline-none"
+                  className="bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-sm text-white focus:outline-none min-w-[170px]"
                 >
                   <option value="">Все турниры</option>
                   {tournamentOptions.map((t) => (
@@ -345,7 +345,7 @@ export default function TeamsAndPlayers({
                 </select>
                 <button
                   type="submit"
-                  className="inline-flex items-center gap-1 rounded-lg px-3 py-1 bg-white/10 border border-white/15 text-white hover:bg-white/15"
+                  className="inline-flex items-center gap-1 rounded-lg px-3 py-2 bg-white/10 border border-white/15 text-white hover:bg-white/15"
                 >
                   Показать
                 </button>
@@ -362,9 +362,9 @@ export default function TeamsAndPlayers({
                 {teams.map((team) => (
                   <div
                     key={`${team.id}-${team.name}`}
-                    className="flex items-center justify-between rounded-2xl bg-white/5 border border-white/10 px-4 py-3 md:px-5 md:py-4 shadow-[0_12px_40px_rgba(0,0,0,0.5)]"
+                    className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl bg-white/5 border border-white/10 px-4 py-3 md:px-5 md:py-4 shadow-[0_12px_40px_rgba(0,0,0,0.5)]"
                   >
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 w-full sm:w-auto">
                       <div className="w-10 h-10 rounded-full bg-vz_purple_dark flex items-center justify-center text-sm font-bold">
                         {team.name[0]}
                       </div>
@@ -378,15 +378,17 @@ export default function TeamsAndPlayers({
                       </div>
                     </div>
 
-                    <span
-                      className={`text-xs md:text-sm px-3 py-1 rounded-full border ${
-                        team.status === "active" || team.status === "confirmed"
-                          ? "border-vz_green text-vz_green"
-                          : "border-white/40 text-white/80"
-                      }`}
-                    >
-                      {teamStatusLabel(team.status)}
-                    </span>
+                    <div className="w-full sm:w-auto sm:text-right">
+                      <span
+                        className={`inline-flex justify-center text-xs md:text-sm px-3 py-1 rounded-full border min-w-[110px] ${
+                          team.status === "active" || team.status === "confirmed"
+                            ? "border-vz_green text-vz_green"
+                            : "border-white/40 text-white/80"
+                        }`}
+                      >
+                        {teamStatusLabel(team.status)}
+                      </span>
+                    </div>
                   </div>
                 ))}
 
@@ -413,7 +415,7 @@ export default function TeamsAndPlayers({
           </div>
 
           <div className="space-y-4">
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
               <div>
                 <h3 className="text-lg md:text-xl font-semibold mb-1">
                   Результаты прошлого турнира
@@ -442,9 +444,9 @@ export default function TeamsAndPlayers({
                   {matches.map((match) => (
                     <li
                       key={match.id}
-                      className="px-5 py-4 space-y-1"
+                      className="px-5 py-4 space-y-2"
                     >
-                      <div className="flex items-center justify-between gap-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3">
                         <div className="flex flex-col">
                           <span className="text-sm font-semibold">
                             {match.teamHomeName} vs {match.teamAwayName}
@@ -455,7 +457,7 @@ export default function TeamsAndPlayers({
                             {match.startAt ? ` • ${match.startAt}` : ""}
                           </span>
                         </div>
-                        <span className="text-base md:text-lg font-bold text-white">
+                        <span className="text-lg md:text-xl font-bold text-white">
                           {match.scoreHome ?? "-"} : {match.scoreAway ?? "-"}
                         </span>
                       </div>
