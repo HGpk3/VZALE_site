@@ -434,7 +434,7 @@ function getProfileData(telegramId: number): ProfileData {
           ms.team_away_name AS teamAwayName,
           ms.score_home AS scoreHome,
           ms.score_away AS scoreAway,
-          COALESCE(m.start_at, ms.start_at) AS startAt,
+          m.start_at AS startAt,
           COALESCE(m.stage, ms.stage) AS stage,
           m.group_name AS groupName
         FROM player_match_stats pms
