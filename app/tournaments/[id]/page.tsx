@@ -336,20 +336,19 @@ export default function TournamentPage({ params }: { params: { id: string } }) {
 
   const row = fetchTournament(id);
 
+  const matches = getMatches(id);
+  const teams = getTeams(id);
+  const hasAnyData = !!row || teams.length > 0 || matches.length > 0;
+
   // Если записи турнира нет (например, в базе сохранились только матчи/составы),
   // всё равно показываем страницу по id и рендерим команды/матчи из БД.
   // 404 отдаём только если совсем нет данных.
-  const fallbackTeams = getTeams(id);
-  const hasAnyData = !!row || fallbackTeams.length > 0 || getMatches(id).length > 0;
-
-  if (!hasAnyData) return notFound();
+  const showEmptyState = !hasAnyData;
 
   const status = normalizeStatus(row?.status ?? null) ?? "draft";
   const settings = row ? parseSettings(row.settingsJson) : null;
   const canRegister = status === "registration_open";
-  const matches = getMatches(id);
   const playerStatsMap = getPlayerStatsMap(id);
-  const teams = row ? getTeams(id) : fallbackTeams;
 
   function matchStatusBadge(value: string | null) {
     switch (value) {
@@ -390,6 +389,16 @@ export default function TournamentPage({ params }: { params: { id: string } }) {
           >
             {statusLabel[status]}
           </span>
+
+          {showEmptyState ? (
+            <div className="mt-4 rounded-2xl border border-white/15 bg-white/5 p-4 text-sm text-white/75">
+              <p className="font-semibold text-white">Данные пока не загружены</p>
+              <p className="mt-1 text-white/70">
+                Мы не нашли запись турнира или связанные матчи и команды. Ссылка останется
+                доступной, как только бот или админка добавят информацию в базу.
+              </p>
+            </div>
+          ) : null}
         </header>
 
         {/* Основной блок */}
