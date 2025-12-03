@@ -80,27 +80,8 @@ function getTeams(tournamentId: number | null): TeamRow[] {
     .all(tournamentId, tournamentId) as TeamRow[];
 }
 
-function getTopPlayers(tournamentId: number | null): PlayerRow[] {
+function getTopPlayers(): PlayerRow[] {
   const db = getDb();
-
-  if (tournamentId) {
-    return db
-      .prepare(
-        `
-          SELECT
-            ps.user_id AS userId,
-            u.full_name AS fullName,
-            ps.rating,
-            ps.games
-          FROM player_ratings_by_tournament ps
-          LEFT JOIN users u ON u.user_id = ps.user_id
-          WHERE ps.tournament_id = ?
-          ORDER BY ps.rating DESC
-          LIMIT 5
-        `
-      )
-      .all(tournamentId) as PlayerRow[];
-  }
 
   return db
     .prepare(
@@ -122,11 +103,9 @@ function getTopPlayers(tournamentId: number | null): PlayerRow[] {
 export default function TeamsAndPlayers() {
   const tournamentId = getLatestTournamentId();
   const teams = getTeams(tournamentId);
-  const players = getTopPlayers(tournamentId);
+  const players = getTopPlayers();
 
-  const tournamentHint = tournamentId
-    ? "RP по последнему турниру"
-    : "Глобальный рейтинг RP";
+  const tournamentHint = "Глобальный RP (все сезоны)";
 
   function teamStatusLabel(status: string | null) {
     switch (status) {

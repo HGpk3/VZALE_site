@@ -2,14 +2,14 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 
+import { LiveEntryClient } from "./LiveEntryClient";
 import { isAdmin } from "@/lib/admin";
 import { fetchAllTournaments } from "@/lib/tournaments";
-import { AdminPanel } from "../me/components/AdminPanel";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-export default async function AdminPage() {
+export default async function LiveStatsPage() {
   const cookieStore = await cookies();
   const telegramId = cookieStore.get("vzale_telegram_id")?.value;
 
@@ -28,19 +28,13 @@ export default async function AdminPage() {
         </div>
 
         <div className="relative z-10 flex items-center justify-between flex-wrap gap-3">
-          <Link
-            href="/me"
-            className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white hover:bg-white/10 transition"
-          >
-            <span aria-hidden>←</span>
-            <span>Личный кабинет</span>
-          </Link>
           <div className="flex items-center gap-3">
             <Link
-              href="/admin/live"
-              className="inline-flex items-center gap-2 rounded-full border border-vz_green/40 bg-vz_green/10 px-4 py-2 text-sm font-semibold text-vz_green hover:bg-vz_green/20 transition"
+              href="/admin"
+              className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white hover:bg-white/10 transition"
             >
-              Лайв протокол
+              <span aria-hidden>←</span>
+              <span>Назад в админку</span>
             </Link>
             <Link
               href="/"
@@ -49,19 +43,22 @@ export default async function AdminPage() {
               На главную
             </Link>
           </div>
+          <span className="relative z-10 rounded-full border border-vz_green/40 bg-vz_green/10 px-3 py-1 text-xs uppercase tracking-[0.24em] text-vz_green">
+            Live-режим
+          </span>
         </div>
 
         <header className="relative z-10 space-y-4">
-          <p className="text-xs uppercase tracking-[0.22em] text-white/60">Админ-панель</p>
-          <h1 className="text-3xl md:text-4xl font-extrabold">Управление турнирами и матчами</h1>
+          <p className="text-xs uppercase tracking-[0.22em] text-white/60">Электронный протокол</p>
+          <h1 className="text-3xl md:text-4xl font-extrabold">Лайв внесение статистики</h1>
           <p className="text-sm md:text-base text-white/75 max-w-2xl">
-            Здесь те же действия, что и в боте: создание турниров, открытие/закрытие регистрации,
-            добавление матчей и статистики. Все изменения сразу пишутся в общую базу.
+            Выберите матч, подтяните заявки команд и фиксируйте действия нажатием кнопок — очки, подборы, фолы, ассисты. Сохранение
+            отправит протокол в общую базу бота.
           </p>
         </header>
 
-        <section className="relative z-10 space-y-4" id="admin">
-          <AdminPanel tournaments={tournaments} />
+        <section className="relative z-10">
+          <LiveEntryClient tournaments={tournaments} />
         </section>
       </div>
     </main>
