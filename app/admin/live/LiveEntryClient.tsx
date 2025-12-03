@@ -266,6 +266,53 @@ export function LiveEntryClient({
     return { home, away };
   }, [playerStats, selectedMatch?.teamAwayName, selectedMatch?.teamHomeName]);
 
+  const protocolRows = useMemo(
+    () => Object.values(playerStats).sort((a, b) => b.points - a.points),
+    [playerStats]
+  );
+
+  const exportCsv = () => {
+    if (!selectedMatch) return;
+    const header = [
+      "Игрок",
+      "Команда",
+      "Очки",
+      "3-оч",
+      "Подборы",
+      "Передачи",
+      "Перехваты",
+      "Блоки",
+      "Фолы",
+    ];
+
+    const lines = protocolRows.map((p) =>
+      [
+        p.fullName || `Игрок ${p.userId}`,
+        p.teamName,
+        p.points,
+        p.threes,
+        p.rebounds,
+        p.assists,
+        p.steals,
+        p.blocks,
+        p.fouls,
+      ].join(",")
+    );
+
+    const csv = [header.join(","), ...lines].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `protocol_match_${selectedMatch.id}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const printProtocol = () => {
+    window.print();
+  };
+
   return (
     <div className="relative z-10 space-y-8">
       <div className="rounded-2xl border border-white/10 bg-white/5 p-6 shadow-lg space-y-4">
@@ -464,8 +511,25 @@ export function LiveEntryClient({
             <p className="text-xs uppercase tracking-[0.2em] text-white/60">Электронный протокол 3x3</p>
             <h3 className="text-lg font-semibold">Итоговая ведомость по текущему матчу</h3>
           </div>
-          <div className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs text-white/70">
-            Статус: {status === "finished" ? "Завершён" : status === "running" ? "Идёт" : "Запланирован"}
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs text-white/70">
+              Статус: {status === "finished" ? "Завершён" : status === "running" ? "Идёт" : "Запланирован"}
+            </div>
+            <button
+              type="button"
+              onClick={exportCsv}
+              disabled={!selectedMatch}
+              className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs text-white/80 hover:border-vz_green/60 hover:text-vz_green disabled:opacity-50"
+            >
+              ⬇️ CSV
+            </button>
+            <button
+              type="button"
+              onClick={printProtocol}
+              className="inline-flex items-center gap-1 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs text-white/80 hover:border-vz_green/60 hover:text-vz_green"
+            >
+              🖨️ Печать
+            </button>
           </div>
         </div>
 
@@ -509,7 +573,7 @@ export function LiveEntryClient({
               </tr>
             </thead>
             <tbody className="divide-y divide-white/10">
-              {Object.values(playerStats).map((p) => (
+              {protocolRows.map((p) => (
                 <tr key={`${p.teamName}-${p.userId}`}>
                   <td className="px-4 py-2">{p.fullName || `Игрок ${p.userId}`}</td>
                   <td className="px-4 py-2 text-white/70">{p.teamName}</td>

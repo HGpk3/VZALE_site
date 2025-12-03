@@ -94,6 +94,14 @@ export default async function ParticipatePage() {
           </div>
         ) : (
           <div className="relative z-10 space-y-6">
+            <div className="rounded-2xl border border-white/10 bg-white/5 p-5 text-sm text-white/75 space-y-2">
+              <p className="font-semibold">Как это работает для капитанов</p>
+              <ul className="list-disc list-inside space-y-1 text-white/70">
+                <li>Выберите турнир с открытой регистрацией ниже.</li>
+                <li>Мы подтянем прошлый состав, пригласительная ссылка и пароль останутся прежними.</li>
+                <li>Добавляйте или убирайте игроков по ссылке из бота — изменения попадут в эту же базу.</li>
+              </ul>
+            </div>
             <div className="rounded-2xl border border-white/10 bg-white/5 p-6">
               <TournamentSignup openTournaments={openTournaments} previousTeam={previousTeam} />
             </div>
