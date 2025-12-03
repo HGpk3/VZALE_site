@@ -1,6 +1,9 @@
 import { getDb } from "@/lib/db";
 import TournamentCard from "../components/Tournaments/TournamentCard";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 type TournamentRow = {
   id: number;
   name: string;

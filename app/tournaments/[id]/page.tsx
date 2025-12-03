@@ -3,6 +3,9 @@ import { notFound } from "next/navigation";
 
 import { getDb } from "@/lib/db";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 type TournamentStatus =
   | "draft"
   | "announced"
@@ -24,6 +27,9 @@ type TournamentRow = {
 type MatchRow = {
   id: number;
   stage: string | null;
+  groupName: string | null;
+  startAt: string | null;
+  court: string | null;
   teamHomeName: string;
   teamAwayName: string;
   scoreHome: number | null;
@@ -111,16 +117,20 @@ function getMatches(tournamentId: number): MatchRow[] {
     .prepare(
       `
         SELECT
-          id,
-          stage,
-          team_home_name AS teamHomeName,
-          team_away_name AS teamAwayName,
-          score_home AS scoreHome,
-          score_away AS scoreAway,
-          status
-        FROM matches_simple
-        WHERE tournament_id = ?
-        ORDER BY id DESC
+          ms.id,
+          COALESCE(m.stage, ms.stage) AS stage,
+          m.group_name AS groupName,
+          m.start_at AS startAt,
+          m.court,
+          ms.team_home_name AS teamHomeName,
+          ms.team_away_name AS teamAwayName,
+          ms.score_home AS scoreHome,
+          ms.score_away AS scoreAway,
+          COALESCE(m.status, ms.status) AS status
+        FROM matches_simple ms
+        LEFT JOIN matches m ON m.id = ms.id
+        WHERE ms.tournament_id = ?
+        ORDER BY COALESCE(m.start_at, ms.id) DESC
       `
     )
     .all(tournamentId) as MatchRow[];
@@ -160,7 +170,7 @@ function getPlayerStatsMap(tournamentId: number) {
 }
 
 export default function TournamentPage({ params }: { params: { id: string } }) {
-  const id = Number(params.id);
+  const id = Number.parseInt(params.id, 10);
   if (Number.isNaN(id)) return notFound();
 
   const row = fetchTournament(id);
@@ -297,7 +307,17 @@ export default function TournamentPage({ params }: { params: { id: string } }) {
                 >
                   <div className="flex flex-wrap items-center gap-3 justify-between">
                     <div className="flex flex-col gap-1">
-                      <p className="text-xs text-white/60">{match.stage || "Матч"}</p>
+                      <p className="text-xs text-white/60">
+                        {match.stage || "Матч"}
+                        {match.groupName ? ` • ${match.groupName}` : ""}
+                      </p>
+                      {(match.startAt || match.court) && (
+                        <p className="text-[11px] text-white/50">
+                          {match.startAt ? `Начало: ${match.startAt}` : ""}
+                          {match.startAt && match.court ? " • " : ""}
+                          {match.court ? `Площадка: ${match.court}` : ""}
+                        </p>
+                      )}
                       <div className="flex items-center gap-3 text-lg md:text-xl font-semibold">
                         <span>{match.teamHomeName}</span>
                         <span className="text-white/60">vs</span>
