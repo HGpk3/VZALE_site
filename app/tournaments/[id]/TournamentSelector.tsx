@@ -1,7 +1,6 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useTransition } from "react";
 
 type Props = {
   tournaments: { id: number; name: string }[];
@@ -10,7 +9,6 @@ type Props = {
 
 export default function TournamentSelector({ tournaments, selectedId }: Props) {
   const router = useRouter();
-  const [isPending, startTransition] = useTransition();
 
   return (
     <label className="inline-flex flex-col gap-2 text-sm text-white/80">
@@ -20,11 +18,10 @@ export default function TournamentSelector({ tournaments, selectedId }: Props) {
         value={selectedId.toString()}
         onChange={(e) => {
           const value = Number.parseInt(e.target.value, 10);
-          startTransition(() => {
-            router.replace(`/tournaments/${value}`);
-          });
+          if (Number.isNaN(value)) return;
+          router.push(`/tournaments/${value}`);
+          router.refresh();
         }}
-        disabled={isPending}
       >
         {tournaments.map((tournament) => (
           <option key={tournament.id} value={tournament.id} className="text-black">
