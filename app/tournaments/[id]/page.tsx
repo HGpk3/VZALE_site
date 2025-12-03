@@ -1,99 +1,197 @@
-type TournamentStatus = "upcoming" | "in_progress" | "finished";
+import Link from "next/link";
+import { notFound } from "next/navigation";
 
-interface TournamentDetails {
+import { getDb } from "@/lib/db";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+type TournamentStatus =
+  | "draft"
+  | "announced"
+  | "registration_open"
+  | "closed"
+  | "running"
+  | "finished"
+  | "archived";
+
+type TournamentRow = {
   id: number;
-  title: string;
-  date: string;
-  time: string;
-  place: string;
-  status: TournamentStatus;
-  type: string;
-  description: string;
-  format: string;
-  prizes: string;
-}
-
-const mockTournaments: TournamentDetails[] = [
-  {
-    id: 1,
-    title: "VZALE STREET OPEN",
-    date: "27 апреля",
-    time: "13:00",
-    place: "Санкт-Петербург, площадка VZALE",
-    status: "upcoming",
-    type: "Любительский 3×3 · до 12 команд",
-    description:
-      "Открытие сезона VZALE. Динамичный турнир 3×3 с живой атмосферой, музыкой и медиа-сопровождением. Формат создан для игроков, которые любят комбинацию соревновательности и кайфа от игры.",
-    format:
-      "Команды 3×3, до 4 игроков в заявке. Групповой этап + плей-офф. Игры до 11 или 21 очка (по регламенту турнира).",
-    prizes:
-      "Призы от партнёров, индивидуальные награды MVP, лучший бомбардир, медали и дополнительные призы от VZALE.",
-  },
-  {
-    id: 2,
-    title: "VZALE NIGHT RUN",
-    date: "15 июня",
-    time: "18:00",
-    place: "Санкт-Петербург, outdoor площадка",
-    status: "upcoming",
-    type: "Вечерний турнир 3×3 · музыка · медиа",
-    description:
-      "Вечерний турнир с акцентом на атмосферу: музыка, свет и медиа. Формат для тех, кто любит играть под музыку и камерой.",
-    format:
-      "Команды 3×3, до 5 игроков в заявке. Смешанный формат с сеткой и матчами за каждое место.",
-    prizes:
-      "Призы от партнёров, фотосессия, видеоролики с лучшими моментами, индивидуальные награды.",
-  },
-  {
-    id: 3,
-    title: "VZALE SEASON FINALS",
-    date: "5 марта",
-    time: "12:00",
-    place: "Санкт-Петербург",
-    status: "finished",
-    type: "Финальный турнир сезона",
-    description:
-      "Финальный турнир сезона VZALE с участием лучших команд по итогам нескольких этапов. Высокий уровень конкуренции и сильные составы.",
-    format:
-      "Закрытый турнир по приглашению. Плей-офф сетка, матчи за 3 место и финал. Дополнительные активности для зрителей.",
-    prizes:
-      "Кубок VZALE, индивидуальные награды, медали и подарки от спонсоров.",
-  },
-];
-
-const statusLabel: Record<TournamentStatus, string> = {
-  upcoming: "Регистрация открыта",
-  in_progress: "Турнир идёт",
-  finished: "Турнир завершён",
+  name: string;
+  status: string | null;
+  dateStart: string | null;
+  venue: string | null;
+  settingsJson: string | null;
 };
 
-export default function TournamentPage({
-  params,
-}: {
-  params: { id: string };
-}) {
-  const id = Number(params.id);
-  const t = mockTournaments.find((x) => x.id === id);
+type MatchRow = {
+  id: number;
+  stage: string | null;
+  groupName: string | null;
+  startAt: string | null;
+  court: string | null;
+  teamHomeName: string;
+  teamAwayName: string;
+  scoreHome: number | null;
+  scoreAway: number | null;
+  status: string | null;
+};
 
-  if (!t) {
-    return (
-      <main className="min-h-screen w-full bg-vz-gradient flex items-center justify-center px-6">
-        <div className="max-w-md text-center bg-white/80 rounded-3xl p-8 shadow-xl">
-          <h1 className="text-2xl font-extrabold text-vz_text mb-2">
-            Турнир не найден
-          </h1>
-          <p className="text-sm text-neutral-700 mb-4">
-            Возможно, этот турнир ещё не добавлен или ссылка неверна.
-          </p>
-          <a
-            href="/tournaments"
-            className="inline-flex items-center justify-center px-5 py-2 rounded-xl bg-vz_purple_dark text-white text-sm font-semibold hover:bg-vz_purple transition"
-          >
-            Вернуться к списку турниров
-          </a>
-        </div>
-      </main>
-    );
+type PlayerMatchRow = {
+  matchId: number;
+  userId: number;
+  fullName: string | null;
+  teamName: string;
+  points: number;
+  rebounds: number;
+  assists: number;
+  steals: number;
+  blocks: number;
+  threes: number;
+};
+
+const statusLabel: Record<TournamentStatus, string> = {
+  draft: "Черновик",
+  announced: "Анонс",
+  registration_open: "Регистрация открыта",
+  closed: "Регистрация закрыта",
+  running: "Турнир идёт",
+  finished: "Турнир завершён",
+  archived: "Архив",
+};
+
+const statusColor: Record<TournamentStatus, string> = {
+  draft: "border-white/20 text-white/80",
+  announced: "border-vz_purple/60 text-vz_purple",
+  registration_open: "border-vz_green/70 text-vz_green",
+  closed: "border-amber-400/70 text-amber-200",
+  running: "border-emerald-400/70 text-emerald-200",
+  finished: "border-white/30 text-white/80",
+  archived: "border-white/20 text-white/70",
+};
+
+function normalizeStatus(status: string | null): TournamentStatus | null {
+  if (!status) return null;
+  if (
+    [
+      "draft",
+      "announced",
+      "registration_open",
+      "closed",
+      "running",
+      "finished",
+      "archived",
+    ].includes(status)
+  ) {
+    return status as TournamentStatus;
+  }
+  return null;
+}
+
+function fetchTournament(id: number): TournamentRow | undefined {
+  const db = getDb();
+  return db
+    .prepare(
+      "SELECT id, name, status, date_start as dateStart, venue, settings_json as settingsJson FROM tournaments WHERE id = ?"
+    )
+    .get(id) as TournamentRow | undefined;
+}
+
+function parseSettings(settingsJson: string | null) {
+  if (!settingsJson) return null;
+  try {
+    return JSON.parse(settingsJson) as {
+      description?: string;
+      format?: string;
+      prizes?: string;
+    };
+  } catch (err) {
+    console.error("[tournament] failed to parse settings_json", err);
+    return null;
+  }
+}
+
+function getMatches(tournamentId: number): MatchRow[] {
+  const db = getDb();
+  return db
+    .prepare(
+      `
+        SELECT
+          ms.id,
+          COALESCE(m.stage, ms.stage) AS stage,
+          m.group_name AS groupName,
+          m.start_at AS startAt,
+          m.court,
+          ms.team_home_name AS teamHomeName,
+          ms.team_away_name AS teamAwayName,
+          ms.score_home AS scoreHome,
+          ms.score_away AS scoreAway,
+          COALESCE(m.status, ms.status) AS status
+        FROM matches_simple ms
+        LEFT JOIN matches m ON m.id = ms.id
+        WHERE ms.tournament_id = ?
+        ORDER BY COALESCE(m.start_at, ms.id) DESC
+      `
+    )
+    .all(tournamentId) as MatchRow[];
+}
+
+function getPlayerStatsMap(tournamentId: number) {
+  const db = getDb();
+  const rows = db
+    .prepare(
+      `
+        SELECT
+          pms.match_id AS matchId,
+          pms.user_id AS userId,
+          u.full_name AS fullName,
+          pms.team_name AS teamName,
+          pms.points,
+          pms.rebounds,
+          pms.assists,
+          pms.steals,
+          pms.blocks,
+          pms.threes
+        FROM player_match_stats pms
+        LEFT JOIN users u ON u.user_id = pms.user_id
+        WHERE pms.tournament_id = ?
+        ORDER BY pms.points DESC
+      `
+    )
+    .all(tournamentId) as PlayerMatchRow[];
+
+  const map = new Map<number, PlayerMatchRow[]>();
+  for (const row of rows) {
+    const bucket = map.get(row.matchId) || [];
+    bucket.push(row);
+    map.set(row.matchId, bucket);
+  }
+  return map;
+}
+
+export default function TournamentPage({ params }: { params: { id: string } }) {
+  const id = Number.parseInt(params.id, 10);
+  if (Number.isNaN(id)) return notFound();
+
+  const row = fetchTournament(id);
+  if (!row) return notFound();
+
+  const status = normalizeStatus(row.status) ?? "draft";
+  const settings = parseSettings(row.settingsJson);
+  const canRegister = status === "registration_open";
+  const matches = getMatches(id);
+  const playerStatsMap = getPlayerStatsMap(id);
+
+  function matchStatusBadge(value: string | null) {
+    switch (value) {
+      case "finished":
+        return "bg-white/10 border-white/20 text-white/70";
+      case "running":
+        return "bg-vz_green/20 border-vz_green/40 text-vz_green";
+      case "scheduled":
+      default:
+        return "bg-vz_purple/15 border-vz_purple/30 text-vz_purple";
+    }
   }
 
   return (
@@ -108,22 +206,20 @@ export default function TournamentPage({
         {/* Хедер турнира */}
         <header className="space-y-4">
           <p className="text-xs md:text-sm uppercase tracking-[0.22em] text-white/70">
-            Турнир VZALE
+            Турнир VZALE #{row.id}
           </p>
-          <h1 className="text-3xl md:text-4xl font-extrabold">{t.title}</h1>
+          <h1 className="text-3xl md:text-4xl font-extrabold">{row.name}</h1>
 
           <div className="flex flex-wrap items-center gap-3 text-sm md:text-base text-white/80">
-            <span>
-              {t.date} · {t.time}
-            </span>
-            <span className="text-white/60">•</span>
-            <span>{t.place}</span>
-            <span className="text-white/60">•</span>
-            <span className="text-vz_green">{t.type}</span>
+            {row.dateStart && <span>{row.dateStart}</span>}
+            {row.dateStart && row.venue && <span className="text-white/60">•</span>}
+            {row.venue && <span>{row.venue}</span>}
           </div>
 
-          <span className="inline-flex items-center px-4 py-1 rounded-full border border-vz_green/70 bg-white/5 text-xs md:text-sm font-semibold">
-            {statusLabel[t.status]}
+          <span
+            className={`inline-flex items-center px-4 py-1 rounded-full border bg-white/5 text-xs md:text-sm font-semibold ${statusColor[status]}`}
+          >
+            {statusLabel[status]}
           </span>
         </header>
 
@@ -132,59 +228,160 @@ export default function TournamentPage({
           {/* Описание / формат / призы */}
           <div className="space-y-6">
             <div className="rounded-3xl bg-white/5 border border-white/10 p-6 md:p-7 shadow-[0_20px_60px_rgba(0,0,0,0.6)]">
-              <h2 className="text-xl md:text-2xl font-semibold mb-3">
-                О турнире
-              </h2>
+              <h2 className="text-xl md:text-2xl font-semibold mb-3">О турнире</h2>
               <p className="text-sm md:text-base text-white/80 leading-relaxed">
-                {t.description}
+                {settings?.description ||
+                  "Организатор пока не добавил описание. Следите за обновлениями в боте VZALE."}
               </p>
             </div>
 
             <div className="rounded-3xl bg-white/5 border border-white/10 p-6 md:p-7 space-y-4">
               <div>
-                <h3 className="text-base md:text-lg font-semibold mb-1">
-                  Формат и регламент
-                </h3>
+                <h3 className="text-base md:text-lg font-semibold mb-1">Формат и регламент</h3>
                 <p className="text-sm md:text-base text-white/80 leading-relaxed">
-                  {t.format}
+                  {settings?.format ||
+                    "Детали формата появятся позже. Если вы капитан, уточните в боте перед подачей заявки."}
                 </p>
               </div>
 
               <div>
-                <h3 className="text-base md:text-lg font-semibold mb-1">
-                  Призы и награды
-                </h3>
+                <h3 className="text-base md:text-lg font-semibold mb-1">Призы и награды</h3>
                 <p className="text-sm md:text-base text-white/80 leading-relaxed">
-                  {t.prizes}
+                  {settings?.prizes || "Призы будут объявлены ближе к старту турнира."}
                 </p>
               </div>
             </div>
           </div>
 
-          {/* Правая колонка — CTA и «будущие» блоки */}
+          {/* Правая колонка — CTA */}
           <aside className="space-y-6">
             <div className="rounded-3xl bg-white/5 border border-white/10 p-6 md:p-7 shadow-[0_20px_60px_rgba(0,0,0,0.6)] space-y-4">
-              <h3 className="text-base md:text-lg font-semibold">
-                Принять участие
-              </h3>
+              <h3 className="text-base md:text-lg font-semibold">Принять участие</h3>
               <p className="text-xs md:text-sm text-white/75">
-                На следующем шаге мы свяжем эту кнопку с регистрацией через
-                сайт и бот: выбор команды, создание новой или вход как свободный
-                игрок.
+                Регистрация идёт через бота и сайт: капитаны подают команды, свободные агенты оставляют анкеты.
               </p>
-              <button className="w-full mt-2 bg-vz_green text-black font-semibold text-sm md:text-base px-5 py-3 rounded-xl shadow-[0_0_30px_rgba(164,255,79,0.9)] hover:brightness-110 transition">
-                Зарегистрировать команду
-              </button>
+              <Link
+                href="/participate"
+                className={`w-full inline-flex justify-center mt-2 font-semibold text-sm md:text-base px-5 py-3 rounded-xl transition shadow-[0_0_30px_rgba(164,255,79,0.5)] ${
+                  canRegister
+                    ? "bg-vz_green text-black hover:brightness-110"
+                    : "bg-white/10 text-white/70 cursor-not-allowed"
+                }`}
+                aria-disabled={!canRegister}
+              >
+                {canRegister ? "Подать заявку" : "Регистрация закрыта"}
+              </Link>
             </div>
 
             <div className="rounded-3xl bg-white/5 border border-white/10 p-5 md:p-6 text-xs md:text-sm text-white/70 space-y-2">
-              <p>
-                В будущем здесь можно будет показать список команд, сетку,
-                расписание матчей и прямые ссылки на фото/видео с турнира.
-              </p>
+              <p>Все заявки и команды сразу пишутся в ту же базу, что и бот.</p>
+              <p>После подачи заявку можно отследить и обновить в личном кабинете или в Telegram.</p>
             </div>
           </aside>
         </section>
+
+        <section className="rounded-3xl bg-white/5 border border-white/10 p-6 md:p-7 shadow-[0_20px_60px_rgba(0,0,0,0.6)] space-y-4">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-[0.2em] text-white/60">Результаты</p>
+              <h2 className="text-xl md:text-2xl font-semibold">Матчи турнира</h2>
+            </div>
+            <span className="text-xs text-white/60">
+              {matches.length > 0
+                ? `${matches.length} матч(ей) из базы`
+                : "Пока нет сыгранных или запланированных матчей"}
+            </span>
+          </div>
+
+          {matches.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-white/15 bg-black/20 p-5 text-sm text-white/70">
+              Как только появятся расписание или результаты, здесь отобразятся
+              команды, счёт и лучшие игроки.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {matches.map((match) => (
+                <div
+                  key={match.id}
+                  className="rounded-2xl border border-white/10 bg-black/30 p-4 md:p-5 space-y-3"
+                >
+                  <div className="flex flex-wrap items-center gap-3 justify-between">
+                    <div className="flex flex-col gap-1">
+                      <p className="text-xs text-white/60">
+                        {match.stage || "Матч"}
+                        {match.groupName ? ` • ${match.groupName}` : ""}
+                      </p>
+                      {(match.startAt || match.court) && (
+                        <p className="text-[11px] text-white/50">
+                          {match.startAt ? `Начало: ${match.startAt}` : ""}
+                          {match.startAt && match.court ? " • " : ""}
+                          {match.court ? `Площадка: ${match.court}` : ""}
+                        </p>
+                      )}
+                      <div className="flex items-center gap-3 text-lg md:text-xl font-semibold">
+                        <span>{match.teamHomeName}</span>
+                        <span className="text-white/60">vs</span>
+                        <span>{match.teamAwayName}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl md:text-3xl font-extrabold">
+                        {match.scoreHome ?? "-"} : {match.scoreAway ?? "-"}
+                      </span>
+                      <span
+                        className={`text-xs px-3 py-1 rounded-full border ${matchStatusBadge(match.status)}`}
+                      >
+                        {match.status === "finished"
+                          ? "Завершён"
+                          : match.status === "running"
+                            ? "Идёт"
+                            : "Запланирован"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {playerStatsMap.get(match.id)?.length ? (
+                    <div className="grid md:grid-cols-2 gap-3">
+                      {playerStatsMap
+                        .get(match.id)!
+                        .slice(0, 6)
+                        .map((player) => (
+                          <div
+                            key={`${match.id}-${player.userId}`}
+                            className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm"
+                          >
+                            <div className="flex flex-col">
+                              <span className="font-semibold">
+                                {player.fullName || `Игрок ${player.userId}`}
+                              </span>
+                              <span className="text-[11px] text-white/60">{player.teamName}</span>
+                            </div>
+                            <div className="flex items-center gap-3 text-xs text-white/80">
+                              <span className="font-semibold text-vz_green">{player.points} оч.</span>
+                              <span>{player.rebounds} подб.</span>
+                              <span>{player.assists} пас.</span>
+                              {player.threes ? <span>{player.threes} 3-оч.</span> : null}
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-white/60">
+                      Подробная статистика игроков для этого матча ещё не внесена.
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <Link
+          href="/tournaments"
+          className="inline-flex items-center gap-2 text-sm text-white/70 hover:text-white"
+        >
+          ← Ко всем турнирам
+        </Link>
       </div>
     </main>
   );

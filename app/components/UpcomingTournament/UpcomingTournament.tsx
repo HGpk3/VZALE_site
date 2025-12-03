@@ -1,83 +1,205 @@
-const mockTournament = {
-  title: "VZALE STREET OPEN",
-  date: "27 апреля",
-  time: "13:00",
-  place: "Санкт-Петербург, ул. Примерная, 5",
-  description:
-    "Динамичный турнир 3×3 с живой атмосферой, музыкой и медиа-поддержкой. Подходит для игроков с разным уровнем подготовки.",
+import Link from "next/link";
+
+import { getDb } from "@/lib/db";
+
+type TournamentStatus =
+  | "draft"
+  | "announced"
+  | "registration_open"
+  | "closed"
+  | "running"
+  | "finished"
+  | "archived";
+
+type TournamentRow = {
+  id: number;
+  name: string;
+  status: string | null;
+  dateStart: string | null;
+  venue: string | null;
+  settingsJson: string | null;
 };
 
+const statusLabel: Record<TournamentStatus, string> = {
+  draft: "Черновик",
+  announced: "Анонс",
+  registration_open: "Регистрация открыта",
+  closed: "Регистрация закрыта",
+  running: "Турнир идёт",
+  finished: "Турнир завершён",
+  archived: "Архив",
+};
+
+const statusBadge: Record<TournamentStatus, string> = {
+  draft: "border-white/30 text-white/80",
+  announced: "border-vz_purple/60 text-vz_purple",
+  registration_open: "border-vz_green/80 text-vz_green",
+  closed: "border-amber-300/60 text-amber-200",
+  running: "border-emerald-300/70 text-emerald-200",
+  finished: "border-white/30 text-white/70",
+  archived: "border-white/20 text-white/60",
+};
+
+function normalizeStatus(status: string | null): TournamentStatus | null {
+  if (!status) return null;
+  if (
+    [
+      "draft",
+      "announced",
+      "registration_open",
+      "closed",
+      "running",
+      "finished",
+      "archived",
+    ].includes(status)
+  ) {
+    return status as TournamentStatus;
+  }
+  return null;
+}
+
+function parseSettings(settingsJson: string | null) {
+  if (!settingsJson) return null;
+  try {
+    return JSON.parse(settingsJson) as {
+      description?: string;
+      format?: string;
+    };
+  } catch (err) {
+    console.error("[upcoming] failed to parse settings_json", err);
+    return null;
+  }
+}
+
+function fetchUpcomingTournament(): (TournamentRow & { settings?: ReturnType<typeof parseSettings> }) | null {
+  const db = getDb();
+
+  const row = db
+    .prepare(
+      `
+        SELECT id, name, status, date_start as dateStart, venue, settings_json as settingsJson
+        FROM tournaments
+        WHERE status IN ('registration_open', 'announced', 'running')
+        ORDER BY (date_start IS NULL) ASC, date_start ASC, id DESC
+        LIMIT 1
+      `
+    )
+    .get() as TournamentRow | undefined;
+
+  if (!row) return null;
+
+  return {
+    ...row,
+    settings: parseSettings(row.settingsJson),
+  };
+}
+
 export default function UpcomingTournament() {
+  const tournament = fetchUpcomingTournament();
+
+  if (!tournament) {
+    return (
+      <section className="relative w-full py-20 px-6 md:px-10 bg-gradient-to-b from-[#15082A] via-[#0A0616] to-[#050309] text-white">
+        <div className="max-w-6xl mx-auto space-y-6">
+          <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+            <div>
+              <p className="text-sm uppercase tracking-[0.2em] text-vz_green/80">Ближайшие турниры</p>
+              <h2 className="text-3xl md:text-4xl font-extrabold mt-2">Следите за обновлениями</h2>
+            </div>
+            <span className="inline-flex items-center text-sm md:text-base px-4 py-2 rounded-full border border-white/20 bg-white/5 backdrop-blur-sm text-white/80">
+              Пока нет активных турниров
+            </span>
+          </div>
+
+          <div className="rounded-3xl bg-[#120628] border border-white/15 p-8 md:p-10 shadow-[0_24px_80px_rgba(0,0,0,0.7)] space-y-4">
+            <p className="text-base md:text-lg text-white/80">
+              Сейчас нет турниров с открытой регистрацией. Подпишитесь на нас в соцсетях, чтобы первыми узнать о старте нового сезона.
+            </p>
+            <div className="flex flex-wrap gap-3 text-sm text-white/70">
+              <Link href="/tournaments" className="underline hover:text-white">
+                Смотреть архив турниров
+              </Link>
+              <span className="text-white/40">•</span>
+              <Link href="/participate" className="underline hover:text-white">
+                Оставить заявку как свободный игрок
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
+  const status = normalizeStatus(tournament.status) ?? "draft";
+  const canRegister = status === "registration_open";
+  const description =
+    tournament.settings?.description ||
+    "Динамичный турнир 3×3 с живой атмосферой, музыкой и медиа-поддержкой.";
+  const format = tournament.settings?.format || "Любительский 3×3";
+
   return (
     <section className="relative w-full py-20 px-6 md:px-10 bg-gradient-to-b from-[#15082A] via-[#0A0616] to-[#050309] text-white">
       <div className="max-w-6xl mx-auto">
-
-        {/* Заголовок секции */}
         <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-10">
           <div>
-            <p className="text-sm uppercase tracking-[0.2em] text-vz_green/80">
-              Ближайший турнир
-            </p>
-            <h2 className="text-3xl md:text-4xl font-extrabold mt-2">
-              Открытие сезона VZALE
-            </h2>
+            <p className="text-sm uppercase tracking-[0.2em] text-vz_green/80">Ближайшие турниры</p>
+            <h2 className="text-3xl md:text-4xl font-extrabold mt-2">{tournament.name}</h2>
           </div>
 
-          <span className="inline-flex items-center text-sm md:text-base px-4 py-2 rounded-full border border-vz_green/60 bg-violet-900/40 backdrop-blur-sm">
-            Регистрация открыта
+          <span
+            className={`inline-flex items-center text-sm md:text-base px-4 py-2 rounded-full border bg-white/5 backdrop-blur-sm ${statusBadge[status]}`}
+          >
+            {statusLabel[status]}
           </span>
         </div>
 
-        {/* Карточка турнира */}
         <div className="relative rounded-3xl bg-[#120628] border border-vz_green/40 shadow-[0_24px_80px_rgba(0,0,0,0.7)] overflow-hidden">
-          {/* Неоновый фон внутри */}
           <div className="absolute -top-24 -left-10 w-[320px] h-[260px] bg-vz_green blur-[120px] opacity-60" />
           <div className="absolute -bottom-24 right-0 w-[380px] h-[280px] bg-vz_purple blur-[120px] opacity-70" />
 
           <div className="relative z-10 grid md:grid-cols-[2fr,1fr] gap-10 p-8 md:p-10">
-            {/* Левая часть — инфа */}
             <div className="space-y-4">
-              <h3 className="text-2xl md:text-3xl font-bold">
-                {mockTournament.title}
-              </h3>
+              <h3 className="text-2xl md:text-3xl font-bold">{tournament.name}</h3>
 
               <div className="text-sm md:text-base text-vz_green/90 font-medium space-y-1">
                 <p>
-                  {mockTournament.date} · {mockTournament.time}
+                  {tournament.dateStart || "Дата будет объявлена"}
+                  {tournament.dateStart || tournament.venue ? " · " : ""}
+                  {tournament.venue || "Локация уточняется"}
                 </p>
-                <p>{mockTournament.place}</p>
               </div>
 
-              <p className="text-sm md:text-base text-white/90 max-w-xl">
-                {mockTournament.description}
-              </p>
-
+              <p className="text-sm md:text-base text-white/90 max-w-xl">{description}</p>
             </div>
 
-            {/* Правая часть — CTA */}
             <div className="flex flex-col justify-between gap-6 md:items-end">
               <div className="space-y-2 text-sm md:text-right">
-                <p className="text-xs uppercase tracking-[0.18em] text-white/60">
-                  Формат
-                </p>
-                <p className="text-base md:text-lg font-semibold text-white">
-                  Любительский 3×3 · до 12 команд
-                </p>
+                <p className="text-xs uppercase tracking-[0.18em] text-white/60">Формат</p>
+                <p className="text-base md:text-lg font-semibold text-white">{format}</p>
               </div>
 
               <div className="flex md:flex-col gap-4 md:items-end">
-                <button className="bg-vz_green text-black font-semibold text-base md:text-lg px-6 py-3 rounded-xl shadow-[0_0_30px_rgba(164,255,79,0.9)] hover:brightness-110 transition">
-                  Участвовать
-                </button>
+                <Link
+                  href={canRegister ? "/participate" : `/tournaments/${tournament.id}`}
+                  className={`font-semibold text-base md:text-lg px-6 py-3 rounded-xl transition shadow-[0_0_30px_rgba(164,255,79,0.9)] ${
+                    canRegister
+                      ? "bg-vz_green text-black hover:brightness-110"
+                      : "bg-white/10 text-white/70 border border-white/30 hover:bg-white/15"
+                  }`}
+                >
+                  {canRegister ? "Участвовать" : "Подробнее"}
+                </Link>
 
-                <button className="border border-white/40 text-white font-medium text-sm md:text-base px-6 py-3 rounded-xl hover:bg-white/10 transition">
+                <Link
+                  href={`/tournaments/${tournament.id}`}
+                  className="border border-white/30 text-white font-medium text-sm md:text-base px-6 py-3 rounded-xl hover:bg-white/10 transition"
+                >
                   Подробнее о турнире
-                </button>
+                </Link>
               </div>
             </div>
           </div>
 
-          {/* Верхняя тонкая рамка для объёма */}
           <div className="pointer-events-none absolute inset-0 rounded-3xl border border-white/10" />
         </div>
       </div>

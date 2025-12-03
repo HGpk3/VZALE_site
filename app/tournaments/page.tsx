@@ -1,33 +1,79 @@
+import { getDb } from "@/lib/db";
 import TournamentCard from "../components/Tournaments/TournamentCard";
 
-const mockTournaments = [
-  {
-    id: 1,
-    title: "VZALE STREET OPEN",
-    date: "27 апреля · 13:00",
-    place: "Санкт-Петербург, площадка VZALE",
-    status: "upcoming" as const,
-    type: "Любительский 3×3 · до 12 команд",
-  },
-  {
-    id: 2,
-    title: "VZALE NIGHT RUN",
-    date: "15 июня · 18:00",
-    place: "Санкт-Петербург, outdoor площадка",
-    status: "upcoming" as const,
-    type: "Вечерний турнир · музыка · медиа",
-  },
-  {
-    id: 3,
-    title: "VZALE SEASON FINALS",
-    date: "Состоялся: 5 марта",
-    place: "Санкт-Петербург",
-    status: "finished" as const,
-    type: "Финальный турнир сезона",
-  },
-];
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+type TournamentRow = {
+  id: number;
+  name: string;
+  status: string | null;
+  dateStart: string | null;
+  venue: string | null;
+};
+
+const statusPriority: Record<string, number> = {
+  registration_open: 1,
+  announced: 2,
+  running: 3,
+  draft: 4,
+  closed: 5,
+  finished: 6,
+  archived: 7,
+};
+
+function fetchTournaments(): TournamentRow[] {
+  const db = getDb();
+  return db
+    .prepare(
+      "SELECT id, name, status, date_start as dateStart, venue FROM tournaments ORDER BY id DESC"
+    )
+    .all() as TournamentRow[];
+}
+
+function normalizeStatus(status: string | null):
+  | "draft"
+  | "announced"
+  | "registration_open"
+  | "closed"
+  | "running"
+  | "finished"
+  | "archived"
+  | null {
+  if (!status) return null;
+  if (
+    [
+      "draft",
+      "announced",
+      "registration_open",
+      "closed",
+      "running",
+      "finished",
+      "archived",
+    ].includes(status)
+  ) {
+    return status as
+      | "draft"
+      | "announced"
+      | "registration_open"
+      | "closed"
+      | "running"
+      | "finished"
+      | "archived";
+  }
+  return null;
+}
 
 export default function TournamentsPage() {
+  const tournaments = fetchTournaments().sort((a, b) => {
+    const aStatus = normalizeStatus(a.status) ?? "draft";
+    const bStatus = normalizeStatus(b.status) ?? "draft";
+    const aPriority = statusPriority[aStatus] ?? 99;
+    const bPriority = statusPriority[bStatus] ?? 99;
+    if (aPriority === bPriority) return b.id - a.id;
+    return aPriority - bPriority;
+  });
+
   return (
     <main className="min-h-screen w-full bg-vz-gradient py-20 px-6 md:px-10">
       <div className="max-w-6xl mx-auto space-y-10">
@@ -44,19 +90,25 @@ export default function TournamentsPage() {
           </p>
         </header>
 
-        <section className="grid gap-6 md:grid-cols-2">
-          {mockTournaments.map((t) => (
-            <TournamentCard
-              key={t.id}
-              id={t.id}
-              title={t.title}
-              date={t.date}
-              place={t.place}
-              status={t.status}
-              type={t.type}
-            />
-          ))}
-        </section>
+        {tournaments.length === 0 ? (
+          <div className="rounded-3xl bg-white/80 border border-white/60 p-6 text-neutral-800 text-sm shadow-lg">
+            Пока нет ни одного турнира. Создайте его через админскую панель или
+            бот, и данные появятся здесь автоматически.
+          </div>
+        ) : (
+          <section className="grid gap-6 md:grid-cols-2">
+            {tournaments.map((t) => (
+              <TournamentCard
+                key={t.id}
+                id={t.id}
+                title={t.name}
+                date={t.dateStart}
+                place={t.venue}
+                status={normalizeStatus(t.status)}
+              />
+            ))}
+          </section>
+        )}
       </div>
     </main>
   );

@@ -4,8 +4,19 @@ import { useEffect } from "react";
 
 declare global {
   interface Window {
-    onTelegramAuth?: (user: any) => void;
+    onTelegramAuth?: (user: TelegramAuthUser) => void;
   }
+}
+
+interface TelegramAuthUser {
+  id: number;
+  first_name?: string;
+  last_name?: string;
+  username?: string;
+  photo_url?: string;
+  auth_date?: number;
+  hash?: string;
+  [key: string]: string | number | undefined;
 }
 
 export default function TelegramLoginButton() {
@@ -36,7 +47,7 @@ export default function TelegramLoginButton() {
     container.appendChild(script);
 
     // регистрируем колбэк в window
-    window.onTelegramAuth = async function (user: any) {
+    window.onTelegramAuth = async function (user: TelegramAuthUser) {
       // чисто чтобы ты увидела, что оно сработало:
       alert(`Привет, ${user.first_name || "игрок"}! Telegram ID: ${user.id}`);
 

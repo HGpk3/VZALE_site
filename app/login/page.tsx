@@ -8,43 +8,51 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-async function handleSubmit(e: React.FormEvent) {
-  e.preventDefault();
-  setError(null);
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError(null);
 
-  try {
-    setLoading(true);
-    const res = await fetch("/api/auth/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password }),
-    });
-
-    const text = await res.text(); // <-- читаем как текст
-
-    let data: any = null;
     try {
-      data = text ? JSON.parse(text) : null;
-    } catch (e) {
-      console.error("Не JSON от сервера, сырой ответ:", text);
-    }
+      setLoading(true);
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
 
-    if (!res.ok || !data || !data.ok) {
-      setError(
-        (data && data.error) ||
-          "Ошибка сервера при входе. Подробности смотри в консоли."
-      );
-      return;
-    }
+      const text = await res.text();
 
-    window.location.href = "/me";
-  } catch (err) {
-    console.error(err);
-    setError("Не удалось связаться с сервером");
-  } finally {
-    setLoading(false);
+      let data: unknown = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        console.error("Не JSON от сервера, сырой ответ:", text);
+      }
+
+      const isAuthResponse = (value: unknown): value is { ok: boolean; error?: string } =>
+        Boolean(
+          value &&
+            typeof value === "object" &&
+            "ok" in value &&
+            typeof (value as { ok?: unknown }).ok === "boolean"
+        );
+
+      if (!res.ok || !isAuthResponse(data) || !data.ok) {
+        setError(
+          (isAuthResponse(data) && data.error) ||
+            "Ошибка сервера при входе. Подробности смотри в консоли."
+        );
+        return;
+      }
+
+      window.location.href = "/me";
+    } catch (err) {
+      console.error(err);
+      setError("Не удалось связаться с сервером");
+    } finally {
+      setLoading(false);
+    }
   }
-}
 
   return (
     <main className="min-h-screen flex items-center justify-center bg-vz-gradient px-4">

@@ -1,16 +1,48 @@
 // src/lib/db.ts
 import Database from "better-sqlite3";
+import fs from "fs";
 import path from "path";
 
 let db: Database.Database | null = null;
 
+function resolveDbPath() {
+  const envPath = process.env.DB_PATH?.trim();
+  if (envPath) return envPath;
+
+  const seen = new Set<string>();
+  let dir = process.cwd();
+
+  // Поднимаемся вверх от текущей директории и ищем файл в типовых местах,
+  // чтобы Next.js в .next/server тоже находил реальную базу, а не создавал пустую.
+  while (!seen.has(dir)) {
+    seen.add(dir);
+
+    const candidates = [
+      path.join(dir, "VZALE_BOT", "tournament.db"),
+      path.join(dir, "tournament.db"),
+    ];
+
+    for (const candidate of candidates) {
+      if (fs.existsSync(candidate)) return candidate;
+    }
+
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+
+  // запасной вариант — пустая база в корне проекта, если бот ещё не положил свою
+  return path.join(process.cwd(), "VZALE_BOT", "tournament.db");
+}
+
 function initDatabase() {
-  // 👉 ОБЯЗАТЕЛЬНО проверь путь, чтобы он совпадал с тем,
-  // где реально лежит tournament.db у бота
-  const dbPath =
-    process.env.DB_PATH ||
-    "C:/Users/User/Desktop/Site_VZALE/vzale-site/VZALE_BOT/tournament.db"
-  console.log("[DB] using database file:", dbPath);
+  const dbPath = resolveDbPath();
+
+  if (!fs.existsSync(dbPath)) {
+    console.warn("[DB] database file not found, will create new one at:", dbPath);
+  } else {
+    console.log("[DB] using database file:", dbPath);
+  }
 
   const instance = new Database(dbPath);
 
