@@ -19,8 +19,11 @@ export default function TournamentSelector({ tournaments, selectedId }: Props) {
         onChange={(e) => {
           const value = Number.parseInt(e.target.value, 10);
           if (Number.isNaN(value)) return;
+          // Используем полную навигацию, чтобы гарантированно получить свежие данные сервера
+          // даже если клиентский роутер по какой-то причине не перерисует страницу.
           router.push(`/tournaments/${value}`);
           router.refresh();
+          window.location.assign(`/tournaments/${value}`);
         }}
       >
         {tournaments.map((tournament) => (

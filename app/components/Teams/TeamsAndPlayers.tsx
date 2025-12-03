@@ -104,6 +104,30 @@ function getLatestTournamentId(): number | null {
   return fallback?.id ?? null;
 }
 
+function getLatestResultsTournamentId(): number | null {
+  const db = getDb();
+
+  const row = db
+    .prepare(
+      `
+        SELECT ms.tournament_id AS id
+        FROM matches_simple ms
+        WHERE ms.score_home IS NOT NULL AND ms.score_away IS NOT NULL
+        GROUP BY ms.tournament_id
+        ORDER BY ms.tournament_id DESC
+        LIMIT 1
+      `,
+    )
+    .get() as { id: number } | undefined;
+
+  if (row?.id) return row.id;
+
+  const latestFinished = getLatestFinishedTournamentId();
+  if (latestFinished) return latestFinished;
+
+  return getLatestTournamentId();
+}
+
 function getTeams(
   tournamentId: number | null,
   limit: number
@@ -237,6 +261,7 @@ export default function TeamsAndPlayers({
   const tournamentOptions = getTournamentOptions();
   const latestTournamentId = getLatestTournamentId();
   const latestFinishedTournamentId = getLatestFinishedTournamentId();
+  const latestResultsTournamentId = getLatestResultsTournamentId();
 
   const defaultTeamsTournamentId =
     latestFinishedTournamentId ?? latestTournamentId;
@@ -247,7 +272,7 @@ export default function TeamsAndPlayers({
   const teamsLimit = showAllTeams ? 50 : 6;
 
   const teams = getTeams(selectedTeamsTournamentId, teamsLimit);
-  const resultsTournamentId = latestFinishedTournamentId ?? latestTournamentId;
+  const resultsTournamentId = latestResultsTournamentId;
   const matches = getLatestMatchesForTournament(resultsTournamentId, 8);
   const matchesTournamentName = getTournamentName(resultsTournamentId);
 
