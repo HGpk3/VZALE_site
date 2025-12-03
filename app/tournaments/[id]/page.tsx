@@ -37,6 +37,24 @@ type MatchRow = {
   status: string | null;
 };
 
+type TeamRow = {
+  name: string;
+  paid: number;
+};
+
+type RosterRow = {
+  teamName: string;
+  userId: number;
+  fullName: string | null;
+  isCaptain: number;
+};
+
+type TeamWithRoster = TeamRow & {
+  wins: number;
+  losses: number;
+  roster: RosterRow[];
+};
+
 type PlayerMatchRow = {
   matchId: number;
   userId: number;
@@ -136,6 +154,80 @@ function getMatches(tournamentId: number): MatchRow[] {
     .all(tournamentId) as MatchRow[];
 }
 
+function getTeams(tournamentId: number): TeamWithRoster[] {
+  const db = getDb();
+
+  const teams = db
+    .prepare(
+      `
+        SELECT name, paid
+        FROM tournament_team_names
+        WHERE tournament_id = ?
+        ORDER BY paid DESC, name ASC
+      `,
+    )
+    .all(tournamentId) as TeamRow[];
+
+  const rosterRows = db
+    .prepare(
+      `
+        SELECT
+          team_name AS teamName,
+          user_id AS userId,
+          full_name AS fullName,
+          is_captain AS isCaptain
+        FROM tournament_roster
+        WHERE tournament_id = ?
+        ORDER BY is_captain DESC, full_name ASC
+      `,
+    )
+    .all(tournamentId) as RosterRow[];
+
+  const rosterMap = new Map<string, RosterRow[]>();
+  for (const row of rosterRows) {
+    const bucket = rosterMap.get(row.teamName) || [];
+    bucket.push(row);
+    rosterMap.set(row.teamName, bucket);
+  }
+
+  // Собираем статистику побед/поражений из matches_simple, опираясь на названия команд
+  const matchStats = db
+    .prepare(
+      `
+        SELECT team_home_name AS home, team_away_name AS away, score_home AS sh, score_away AS sa
+        FROM matches_simple
+        WHERE tournament_id = ?
+      `,
+    )
+    .all(tournamentId) as { home: string; away: string; sh: number | null; sa: number | null }[];
+
+  const record = new Map<string, { wins: number; losses: number }>();
+  for (const { home, away, sh, sa } of matchStats) {
+    const homeRec = record.get(home) || { wins: 0, losses: 0 };
+    const awayRec = record.get(away) || { wins: 0, losses: 0 };
+
+    if (sh != null && sa != null) {
+      if (sh > sa) {
+        homeRec.wins += 1;
+        awayRec.losses += 1;
+      } else if (sa > sh) {
+        awayRec.wins += 1;
+        homeRec.losses += 1;
+      }
+    }
+
+    record.set(home, homeRec);
+    record.set(away, awayRec);
+  }
+
+  return teams.map((team) => ({
+    ...team,
+    wins: record.get(team.name)?.wins ?? 0,
+    losses: record.get(team.name)?.losses ?? 0,
+    roster: rosterMap.get(team.name) ?? [],
+  }));
+}
+
 function getPlayerStatsMap(tournamentId: number) {
   const db = getDb();
   const rows = db
@@ -181,6 +273,7 @@ export default function TournamentPage({ params }: { params: { id: string } }) {
   const canRegister = status === "registration_open";
   const matches = getMatches(id);
   const playerStatsMap = getPlayerStatsMap(id);
+  const teams = getTeams(id);
 
   function matchStatusBadge(value: string | null) {
     switch (value) {
@@ -278,6 +371,72 @@ export default function TournamentPage({ params }: { params: { id: string } }) {
               <p>После подачи заявку можно отследить и обновить в личном кабинете или в Telegram.</p>
             </div>
           </aside>
+        </section>
+
+        <section className="rounded-3xl bg-white/5 border border-white/10 p-6 md:p-7 shadow-[0_20px_60px_rgba(0,0,0,0.6)] space-y-4">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-[0.2em] text-white/60">Участники</p>
+              <h2 className="text-xl md:text-2xl font-semibold">Команды турнира</h2>
+            </div>
+            <span className="text-xs text-white/60">
+              {teams.length > 0
+                ? `${teams.length} команд(ы) в списке`
+                : "Пока ни одна команда не добавлена"}
+            </span>
+          </div>
+
+          {teams.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-white/15 bg-black/20 p-5 text-sm text-white/70">
+              Как только капитаны подадут заявки, здесь появится таблица команд и их составов.
+            </div>
+          ) : (
+            <div className="grid gap-3 md:grid-cols-2">
+              {teams.map((team) => (
+                <div
+                  key={team.name}
+                  className="rounded-2xl border border-white/10 bg-black/25 p-4 md:p-5 space-y-3"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-lg font-semibold leading-tight">{team.name}</h3>
+                      <p className="text-[11px] text-white/60">
+                        {team.wins + team.losses === 0
+                          ? "Ещё нет сыгранных матчей"
+                          : `${team.wins}-${team.losses} (W-L)`}
+                      </p>
+                    </div>
+                    <span
+                      className={`inline-flex items-center px-3 py-1 rounded-full text-[11px] font-semibold ${team.paid ? "bg-vz_green/80 text-black" : "bg-white/10 text-white/70"}`}
+                    >
+                      {team.paid ? "Взнос оплачен" : "Без оплаты"}
+                    </span>
+                  </div>
+
+                  <div className="space-y-2 text-xs text-white/80">
+                    {team.roster.length === 0 ? (
+                      <p className="text-white/60">Состав пока не указан.</p>
+                    ) : (
+                      team.roster.map((player) => (
+                        <div
+                          key={`${team.name}-${player.userId}`}
+                          className="flex items-center justify-between rounded-xl border border-white/5 bg-white/5 px-3 py-2"
+                        >
+                          <div className="flex flex-col">
+                            <span className="font-semibold">{player.fullName || `Игрок ${player.userId}`}</span>
+                            <span className="text-[11px] text-white/60">
+                              {player.isCaptain ? "Капитан" : "Игрок"}
+                            </span>
+                          </div>
+                          <span className="text-[11px] text-white/60">ID: {player.userId}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </section>
 
         <section className="rounded-3xl bg-white/5 border border-white/10 p-6 md:p-7 shadow-[0_20px_60px_rgba(0,0,0,0.6)] space-y-4">
