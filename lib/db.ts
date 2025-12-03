@@ -9,19 +9,30 @@ function resolveDbPath() {
   const envPath = process.env.DB_PATH?.trim();
   if (envPath) return envPath;
 
-  const candidates = [
-    path.join(process.cwd(), "VZALE_BOT", "tournament.db"),
-    path.join(process.cwd(), "tournament.db"),
-    path.join(__dirname, "..", "VZALE_BOT", "tournament.db"),
-    path.join(__dirname, "..", "..", "VZALE_BOT", "tournament.db"),
-  ];
+  const seen = new Set<string>();
+  let dir = process.cwd();
 
-  for (const candidate of candidates) {
-    if (fs.existsSync(candidate)) return candidate;
+  // Поднимаемся вверх от текущей директории и ищем файл в типовых местах,
+  // чтобы Next.js в .next/server тоже находил реальную базу, а не создавал пустую.
+  while (!seen.has(dir)) {
+    seen.add(dir);
+
+    const candidates = [
+      path.join(dir, "VZALE_BOT", "tournament.db"),
+      path.join(dir, "tournament.db"),
+    ];
+
+    for (const candidate of candidates) {
+      if (fs.existsSync(candidate)) return candidate;
+    }
+
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
   }
 
   // запасной вариант — пустая база в корне проекта, если бот ещё не положил свою
-  return candidates[0];
+  return path.join(process.cwd(), "VZALE_BOT", "tournament.db");
 }
 
 function initDatabase() {

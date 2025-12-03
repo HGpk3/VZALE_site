@@ -741,14 +741,14 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
             {playerStats.map((row, index) => (
               <div
                 key={index}
-                className="grid gap-2 md:grid-cols-[1.1fr,1.4fr,repeat(5,1fr)] items-end rounded-xl border border-white/10 bg-black/30 p-3"
+                className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-[1.1fr,1.3fr,repeat(5,minmax(88px,1fr))] items-end rounded-xl border border-white/10 bg-black/30 p-3"
               >
                 <label className="flex flex-col gap-1 text-xs">
                   <span className="text-white/60">Команда</span>
                   <select
                     value={row.teamId}
                     onChange={(e) => updateStatField(index, "teamId", e.target.value)}
-                    className="rounded-lg bg-black/20 border border-white/15 px-2 py-1 text-white text-sm focus:border-vz_green focus:outline-none"
+                    className="rounded-lg bg-black/20 border border-white/15 px-2 py-1 text-white text-sm focus:border-vz_green focus:outline-none min-w-0"
                   >
                     <option value="" className="bg-black">
                       Выберите команду
@@ -766,7 +766,7 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
                   <select
                     value={row.userId}
                     onChange={(e) => updateStatField(index, "userId", e.target.value)}
-                    className="rounded-lg bg-black/20 border border-white/15 px-2 py-1 text-white text-sm focus:border-vz_green focus:outline-none"
+                    className="rounded-lg bg-black/20 border border-white/15 px-2 py-1 text-white text-sm focus:border-vz_green focus:outline-none min-w-0"
                   >
                     <option value="" className="bg-black">
                       Выберите игрока
@@ -791,7 +791,7 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
                     type="number"
                     value={row.points}
                     onChange={(e) => updateStatField(index, "points", e.target.value)}
-                    className="rounded-lg bg-black/20 border border-white/15 px-2 py-1 text-white text-sm focus:border-vz_green focus:outline-none"
+                    className="rounded-lg bg-black/20 border border-white/15 px-2 py-1 text-white text-sm focus:border-vz_green focus:outline-none min-w-0"
                   />
                 </label>
 
@@ -801,7 +801,7 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
                     type="number"
                     value={row.threes}
                     onChange={(e) => updateStatField(index, "threes", e.target.value)}
-                    className="rounded-lg bg-black/20 border border-white/15 px-2 py-1 text-white text-sm focus:border-vz_green focus:outline-none"
+                    className="rounded-lg bg-black/20 border border-white/15 px-2 py-1 text-white text-sm focus:border-vz_green focus:outline-none min-w-0"
                   />
                 </label>
 
@@ -811,7 +811,7 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
                     type="number"
                     value={row.assists}
                     onChange={(e) => updateStatField(index, "assists", e.target.value)}
-                    className="rounded-lg bg-black/20 border border-white/15 px-2 py-1 text-white text-sm focus:border-vz_green focus:outline-none"
+                    className="rounded-lg bg-black/20 border border-white/15 px-2 py-1 text-white text-sm focus:border-vz_green focus:outline-none min-w-0"
                   />
                 </label>
 
@@ -821,7 +821,7 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
                     type="number"
                     value={row.rebounds}
                     onChange={(e) => updateStatField(index, "rebounds", e.target.value)}
-                    className="rounded-lg bg-black/20 border border-white/15 px-2 py-1 text-white text-sm focus:border-vz_green focus:outline-none"
+                    className="rounded-lg bg-black/20 border border-white/15 px-2 py-1 text-white text-sm focus:border-vz_green focus:outline-none min-w-0"
                   />
                 </label>
 
@@ -835,14 +835,14 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
                   </button>
                 </div>
 
-                <div className="grid grid-cols-3 gap-2 md:col-span-7">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-2 md:col-span-3 xl:col-span-7">
                   <label className="flex flex-col gap-1 text-xs">
                     <span className="text-white/60">Перехваты</span>
                     <input
                       type="number"
                       value={row.steals}
                       onChange={(e) => updateStatField(index, "steals", e.target.value)}
-                      className="rounded-lg bg-black/20 border border-white/15 px-2 py-1 text-white text-sm focus:border-vz_green focus:outline-none"
+                      className="rounded-lg bg-black/20 border border-white/15 px-2 py-1 text-white text-sm focus:border-vz_green focus:outline-none min-w-0"
                     />
                   </label>
                   <label className="flex flex-col gap-1 text-xs">
@@ -851,7 +851,7 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
                       type="number"
                       value={row.blocks}
                       onChange={(e) => updateStatField(index, "blocks", e.target.value)}
-                      className="rounded-lg bg-black/20 border border-white/15 px-2 py-1 text-white text-sm focus:border-vz_green focus:outline-none"
+                      className="rounded-lg bg-black/20 border border-white/15 px-2 py-1 text-white text-sm focus:border-vz_green focus:outline-none min-w-0"
                     />
                   </label>
                   <label className="flex flex-col gap-1 text-xs">
@@ -860,7 +860,7 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
                       type="number"
                       value={row.fouls}
                       onChange={(e) => updateStatField(index, "fouls", e.target.value)}
-                      className="rounded-lg bg-black/20 border border-white/15 px-2 py-1 text-white text-sm focus:border-vz_green focus:outline-none"
+                      className="rounded-lg bg-black/20 border border-white/15 px-2 py-1 text-white text-sm focus:border-vz_green focus:outline-none min-w-0"
                     />
                   </label>
                   <label className="flex flex-col gap-1 text-xs">
@@ -869,7 +869,7 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
                       type="number"
                       value={row.turnovers}
                       onChange={(e) => updateStatField(index, "turnovers", e.target.value)}
-                      className="rounded-lg bg-black/20 border border-white/15 px-2 py-1 text-white text-sm focus:border-vz_green focus:outline-none"
+                      className="rounded-lg bg-black/20 border border-white/15 px-2 py-1 text-white text-sm focus:border-vz_green focus:outline-none min-w-0"
                     />
                   </label>
                   <label className="flex flex-col gap-1 text-xs">
@@ -878,7 +878,7 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
                       type="number"
                       value={row.minutes}
                       onChange={(e) => updateStatField(index, "minutes", e.target.value)}
-                      className="rounded-lg bg-black/20 border border-white/15 px-2 py-1 text-white text-sm focus:border-vz_green focus:outline-none"
+                      className="rounded-lg bg-black/20 border border-white/15 px-2 py-1 text-white text-sm focus:border-vz_green focus:outline-none min-w-0"
                     />
                   </label>
                 </div>
