@@ -271,4 +271,4 @@ export function TournamentSignup({ openTournaments, previousTeam }: Props) {
     </div>
   );
 }
-import type { TeamMemberRow } from "@/lib/tournaments";
+import type { TeamMemberRow } from "@/lib/api";
