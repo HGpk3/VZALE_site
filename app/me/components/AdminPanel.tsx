@@ -44,6 +44,7 @@ const statusLabels: Record<string, string> = {
 const statusOptions = Object.entries(statusLabels);
 
 export function AdminPanel({ tournaments }: AdminPanelProps) {
+  const [tournamentList, setTournamentList] = useState(tournaments);
   const [name, setName] = useState("");
   const [venue, setVenue] = useState("");
   const [dateStart, setDateStart] = useState("");
@@ -53,8 +54,13 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
   const [loading, setLoading] = useState(false);
   const [statusLoading, setStatusLoading] = useState<number | null>(null);
   const [matchLoading, setMatchLoading] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editLoading, setEditLoading] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editVenue, setEditVenue] = useState("");
+  const [editDateStart, setEditDateStart] = useState("");
   const [matchForm, setMatchForm] = useState({
-    tournamentId: tournaments[0]?.id?.toString() || "",
+    tournamentId: tournamentList[0]?.id?.toString() || "",
     stage: "",
     status: "finished",
     teamHomeId: "",
@@ -189,14 +195,20 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
       }
     };
 
-    const tournamentId = matchForm.tournamentId || tournaments[0]?.id?.toString();
+    const tournamentId =
+      matchForm.tournamentId || tournamentList[0]?.id?.toString();
     if (!tournamentId) return;
 
     if (lastLoadedTournamentId.current === tournamentId) return;
     lastLoadedTournamentId.current = tournamentId;
 
     loadTeams(tournamentId);
-  }, [matchForm.tournamentId, matchForm.teamAwayId, matchForm.teamHomeId, tournaments]);
+  }, [
+    matchForm.tournamentId,
+    matchForm.teamAwayId,
+    matchForm.teamHomeId,
+    tournamentList,
+  ]);
 
   async function createTournament(e: React.FormEvent) {
     e.preventDefault();
@@ -218,6 +230,16 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
       setVenue("");
       setDateStart("");
       setStatus("registration_open");
+      setTournamentList((prev) => [
+        {
+          id: data.id,
+          name,
+          venue,
+          dateStart,
+          status,
+        },
+        ...prev,
+      ]);
     } catch (err) {
       if (err instanceof Error) {
         setError(err.message);
@@ -244,6 +266,16 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
         throw new Error(data?.error || "Не удалось обновить статус");
       }
       setMessage("Статус обновлён. Обновите страницу, чтобы увидеть изменения.");
+      setTournamentList((prev) =>
+        prev.map((t) =>
+          t.id === id
+            ? {
+                ...t,
+                status: newStatus,
+              }
+            : t
+        )
+      );
     } catch (err) {
       if (err instanceof Error) {
         setError(err.message);
@@ -292,6 +324,68 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
 
   function removePlayerRow(index: number) {
     setPlayerStats((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function startEdit(tournamentId: number) {
+    const current = tournamentList.find((t) => t.id === tournamentId);
+    if (!current) return;
+    setEditingId(tournamentId);
+    setEditName(current.name || "");
+    setEditVenue(current.venue || "");
+    setEditDateStart(current.dateStart || "");
+    setMessage(null);
+    setError(null);
+  }
+
+  async function submitTournamentEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingId) return;
+    setEditLoading(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/admin/tournaments", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editingId,
+          name: editName,
+          venue: editVenue,
+          dateStart: editDateStart,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || "Не удалось обновить турнир");
+      }
+
+      setTournamentList((prev) =>
+        prev.map((t) =>
+          t.id === editingId
+            ? {
+                ...t,
+                name: editName,
+                venue: editVenue || null,
+                dateStart: editDateStart || null,
+              }
+            : t
+        )
+      );
+
+      setMessage("Турнир обновлён. Обновите страницу, чтобы увидеть изменения.");
+      setEditingId(null);
+      setEditName("");
+      setEditVenue("");
+      setEditDateStart("");
+    } catch (err) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("Неизвестная ошибка");
+      }
+    } finally {
+      setEditLoading(false);
+    }
   }
 
   function autofillRosters() {
@@ -389,7 +483,7 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
 
       setMessage(`Матч сохранён (ID ${data.matchId}). Статистика обновлена.`);
       setMatchForm({
-        tournamentId: tournaments[0]?.id?.toString() || "",
+        tournamentId: tournamentList[0]?.id?.toString() || "",
         stage: "",
         status: "finished",
         teamHomeId: "",
@@ -510,11 +604,11 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
           </div>
         </div>
 
-        {tournaments.length === 0 ? (
+        {tournamentList.length === 0 ? (
           <p className="text-sm text-white/70">Пока нет созданных турниров.</p>
         ) : (
           <div className="space-y-3">
-            {tournaments.map((t) => (
+            {tournamentList.map((t) => (
               <div
                 key={t.id}
                 className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 rounded-xl border border-white/10 bg-black/30 p-4"
@@ -527,21 +621,82 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
                     {t.dateStart ? ` • ${t.dateStart}` : ""}
                   </p>
                 </div>
-                <div className="flex flex-wrap gap-2 text-xs">
-                  {statusOptions.map(([value, label]) => (
-                    <button
-                      key={value}
-                      onClick={() => updateStatus(t.id, value)}
-                      disabled={statusLoading === t.id}
-                      className={`rounded-full border px-3 py-1 font-semibold transition ${
-                        t.status === value
-                          ? "bg-vz_green/20 border-vz_green/40 text-vz_green"
-                          : "bg-white/10 border-white/20 text-white/80 hover:bg-white/20"
-                      }`}
+                <div className="flex flex-col items-start gap-2 md:items-end md:justify-end">
+                  <div className="flex flex-wrap gap-2 text-xs justify-start md:justify-end w-full">
+                    {statusOptions.map(([value, label]) => (
+                      <button
+                        key={value}
+                        onClick={() => updateStatus(t.id, value)}
+                        disabled={statusLoading === t.id}
+                        className={`rounded-full border px-3 py-1 font-semibold transition ${
+                          t.status === value
+                            ? "bg-vz_green/20 border-vz_green/40 text-vz_green"
+                            : "bg-white/10 border-white/20 text-white/80 hover:bg-white/20"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {editingId === t.id ? (
+                    <form
+                      onSubmit={submitTournamentEdit}
+                      className="grid w-full gap-2 md:grid-cols-2 lg:grid-cols-3 text-xs"
                     >
-                      {label}
+                      <label className="flex flex-col gap-1">
+                        <span className="text-white/70">Название</span>
+                        <input
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          required
+                          className="rounded-lg bg-black/30 border border-white/15 px-3 py-2 text-white text-sm focus:border-vz_green focus:outline-none"
+                        />
+                      </label>
+                      <label className="flex flex-col gap-1">
+                        <span className="text-white/70">Локация</span>
+                        <input
+                          value={editVenue}
+                          onChange={(e) => setEditVenue(e.target.value)}
+                          className="rounded-lg bg-black/30 border border-white/15 px-3 py-2 text-white text-sm focus:border-vz_green focus:outline-none"
+                          placeholder="Город, площадка"
+                        />
+                      </label>
+                      <label className="flex flex-col gap-1">
+                        <span className="text-white/70">Дата и время</span>
+                        <input
+                          value={editDateStart}
+                          onChange={(e) => setEditDateStart(e.target.value)}
+                          className="rounded-lg bg-black/30 border border-white/15 px-3 py-2 text-white text-sm focus:border-vz_green focus:outline-none"
+                          placeholder="Например: 12 октября 13:00"
+                        />
+                      </label>
+                      <div className="flex items-center gap-2 md:col-span-2 lg:col-span-3 justify-end">
+                        <button
+                          type="button"
+                          onClick={() => setEditingId(null)}
+                          className="rounded-lg border border-white/20 px-3 py-2 text-white/80 hover:border-white/40 transition"
+                        >
+                          Отмена
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={editLoading}
+                          className="rounded-lg bg-vz_green text-black font-semibold px-4 py-2 text-sm hover:brightness-110 disabled:opacity-60"
+                        >
+                          {editLoading ? "Сохраняем..." : "Сохранить"}
+                        </button>
+                      </div>
+                    </form>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => startEdit(t.id)}
+                      className="text-xs rounded-full border border-white/20 px-3 py-1 text-white/80 hover:border-white/40 transition"
+                    >
+                      Редактировать
                     </button>
-                  ))}
+                  )}
                 </div>
               </div>
             ))}
@@ -596,7 +751,7 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
               <option value="" disabled>
                 Выберите турнир
               </option>
-              {tournaments.map((t) => (
+              {tournamentList.map((t) => (
                 <option key={t.id} value={t.id} className="bg-black">
                   #{t.id} — {t.name}
                 </option>

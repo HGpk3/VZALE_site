@@ -10,11 +10,16 @@ type TeamRow = {
   tournamentId: number | null;
 };
 
-type PlayerRow = {
-  userId: number;
-  fullName: string | null;
-  rating: number;
-  games: number;
+type MatchRow = {
+  id: number;
+  teamHomeName: string;
+  teamAwayName: string;
+  scoreHome: number | null;
+  scoreAway: number | null;
+  stage: string | null;
+  groupName: string | null;
+  status: string | null;
+  startAt: string | null;
 };
 
 type TournamentOption = {
@@ -22,7 +27,6 @@ type TournamentOption = {
   name: string | null;
   status: string | null;
   hasTeams: boolean;
-  hasRatings: boolean;
 };
 
 function getTournamentOptions(): TournamentOption[] {
@@ -34,16 +38,31 @@ function getTournamentOptions(): TournamentOption[] {
           t.id,
           t.name,
           t.status,
-          COUNT(DISTINCT tn.id) > 0 AS hasTeams,
-          COUNT(DISTINCT prt.user_id) > 0 AS hasRatings
+          COUNT(DISTINCT tn.id) > 0 AS hasTeams
         FROM tournaments t
         LEFT JOIN teams_new tn ON tn.tournament_id = t.id
-        LEFT JOIN player_ratings_by_tournament prt ON prt.tournament_id = t.id
         GROUP BY t.id
         ORDER BY t.id DESC
       `
     )
     .all() as TournamentOption[];
+}
+
+function getLatestFinishedTournamentId(): number | null {
+  const db = getDb();
+  const finished = db
+    .prepare(
+      `
+        SELECT id
+        FROM tournaments
+        WHERE status IN ('finished', 'archived')
+        ORDER BY id DESC
+        LIMIT 1
+      `,
+    )
+    .get() as { id: number } | undefined;
+
+  return finished?.id ?? null;
 }
 
 function getLatestTournamentId(): number | null {
@@ -85,6 +104,30 @@ function getLatestTournamentId(): number | null {
   return fallback?.id ?? null;
 }
 
+function getLatestResultsTournamentId(): number | null {
+  const db = getDb();
+
+  const row = db
+    .prepare(
+      `
+        SELECT ms.tournament_id AS id
+        FROM matches_simple ms
+        WHERE ms.score_home IS NOT NULL AND ms.score_away IS NOT NULL
+        GROUP BY ms.tournament_id
+        ORDER BY ms.tournament_id DESC
+        LIMIT 1
+      `,
+    )
+    .get() as { id: number } | undefined;
+
+  if (row?.id) return row.id;
+
+  const latestFinished = getLatestFinishedTournamentId();
+  if (latestFinished) return latestFinished;
+
+  return getLatestTournamentId();
+}
+
 function getTeams(
   tournamentId: number | null,
   limit: number
@@ -111,43 +154,43 @@ function getTeams(
     .all(tournamentId, tournamentId, limit) as TeamRow[];
 }
 
-function getTopPlayers(tournamentId: number | null): PlayerRow[] {
+function getTournamentName(tournamentId: number | null): string | null {
+  if (!tournamentId) return null;
   const db = getDb();
+  const row = db
+    .prepare("SELECT name FROM tournaments WHERE id = ?")
+    .get(tournamentId) as { name: string | null } | undefined;
+  return row?.name ?? null;
+}
 
-  if (tournamentId === null) {
-    return db
-      .prepare(
-        `
-          SELECT
-            pr.user_id AS userId,
-            u.full_name AS fullName,
-            pr.rating,
-            pr.games
-          FROM player_ratings pr
-          LEFT JOIN users u ON u.user_id = pr.user_id
-          ORDER BY pr.rating DESC
-          LIMIT 5
-        `
-      )
-      .all() as PlayerRow[];
-  }
+function getLatestMatchesForTournament(
+  tournamentId: number | null,
+  limit: number,
+): MatchRow[] {
+  if (!tournamentId) return [];
 
+  const db = getDb();
   return db
     .prepare(
       `
         SELECT
-          prt.user_id AS userId,
-          u.full_name AS fullName,
-          prt.rating,
-          prt.games
-        FROM player_ratings_by_tournament prt
-        LEFT JOIN users u ON u.user_id = prt.user_id
-        WHERE prt.tournament_id = ?
-        ORDER BY prt.rating DESC
-        LIMIT 5
+          ms.id,
+          ms.team_home_name AS teamHomeName,
+          ms.team_away_name AS teamAwayName,
+          ms.score_home AS scoreHome,
+          ms.score_away AS scoreAway,
+          COALESCE(m.stage, ms.stage) AS stage,
+          m.group_name AS groupName,
+          COALESCE(m.status, ms.status) AS status,
+          m.start_at AS startAt
+        FROM matches_simple ms
+        LEFT JOIN matches m ON m.id = ms.id
+        WHERE ms.tournament_id = ?
+        ORDER BY COALESCE(m.start_at, ms.id) DESC
+        LIMIT ?
       `
     )
-    .all(tournamentId) as PlayerRow[];
+    .all(tournamentId, limit) as MatchRow[];
 }
 
 function parseNumber(value: string | string[] | undefined): number | null {
@@ -217,30 +260,26 @@ export default function TeamsAndPlayers({
 }) {
   const tournamentOptions = getTournamentOptions();
   const latestTournamentId = getLatestTournamentId();
+  const latestFinishedTournamentId = getLatestFinishedTournamentId();
+  const latestResultsTournamentId = getLatestResultsTournamentId();
+
+  const defaultTeamsTournamentId =
+    latestFinishedTournamentId ?? latestTournamentId;
 
   const selectedTeamsTournamentId =
-    parseNumber(searchParams.teamTournament) ?? latestTournamentId;
-  const selectedPlayersTournamentId = parseNumber(
-    searchParams.playersTournament
-  );
+    parseNumber(searchParams.teamTournament) ?? defaultTeamsTournamentId;
   const showAllTeams = (searchParams.showTeams as string) === "all";
   const teamsLimit = showAllTeams ? 50 : 6;
 
   const teams = getTeams(selectedTeamsTournamentId, teamsLimit);
-  const players = getTopPlayers(selectedPlayersTournamentId);
-
-  const tournamentHint = selectedPlayersTournamentId
-    ? `RP за турнир #${selectedPlayersTournamentId}`
-    : "Глобальный RP (все сезоны)";
-
-  const playersTournamentName = selectedPlayersTournamentId
-    ? tournamentOptions.find((t) => t.id === selectedPlayersTournamentId)?.name
-    : null;
+  const resultsTournamentId = latestResultsTournamentId;
+  const matches = getLatestMatchesForTournament(resultsTournamentId, 8);
+  const matchesTournamentName = getTournamentName(resultsTournamentId);
 
   const hasMoreTeams = !showAllTeams && teams.length === teamsLimit;
 
   return (
-    <section className="relative w-full py-20 md:py-24 px-6 md:px-10 bg-gradient-to-b from-[#0B0615] via-[#050309] to-black text-white">
+    <section className="relative w-full py-16 md:py-24 px-4 sm:px-6 md:px-10 bg-gradient-to-b from-[#0B0615] via-[#050309] to-black text-white">
       <div className="pointer-events-none absolute inset-0 opacity-40">
         <div className="absolute -top-10 left-0 w-[280px] h-[200px] bg-vz_purple blur-[110px]" />
         <div className="absolute bottom-0 right-10 w-[260px] h-[220px] bg-vz_green blur-[110px]" />
@@ -250,16 +289,16 @@ export default function TeamsAndPlayers({
         <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-10">
           <div className="space-y-2">
             <h2 className="text-3xl md:text-4xl font-extrabold">
-              Команды и топ игроки
+              Команды и результаты
             </h2>
             <p className="text-sm md:text-base text-white/70 max-w-md">
-              Фильтруйте по турнирам, смотрите весь список команд и лидеров RP —
-              данные идут напрямую из базы бота.
+              Фильтруйте команды по турнирам и смотрите свежие результаты
+              последнего завершённого ивента.
             </p>
           </div>
 
-          <div className="flex flex-wrap gap-3 text-xs md:text-sm text-white/70">
-            <span className="font-mono bg-white/5 border border-white/10 px-3 py-1 rounded-full">
+          <div className="flex flex-wrap gap-3 text-xs md:text-sm text-white/70 justify-start md:justify-end">
+            <span className="font-mono bg-white/5 border border-white/10 px-3 py-1 rounded-full whitespace-nowrap">
               {tournamentOptions.length} турниров в базе
             </span>
             <Link
@@ -271,26 +310,17 @@ export default function TeamsAndPlayers({
           </div>
         </div>
 
-        <div className="grid gap-8 md:grid-cols-2">
+        <div className="grid gap-8 lg:grid-cols-2">
           <div className="space-y-4">
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
               <div>
                 <h3 className="text-lg md:text-xl font-semibold mb-1">Команды</h3>
                 <p className="text-xs text-white/60">Берём составы прямо из текущих заявок бота.</p>
               </div>
-              <form method="get" className="flex items-center gap-2 text-xs">
-                <label className="text-white/60" htmlFor="teams-select">
+              <form method="get" className="flex flex-wrap items-center gap-2 text-xs">
+                <label className="text-white/60 whitespace-nowrap" htmlFor="teams-select">
                   Турнир
                 </label>
-                <input
-                  type="hidden"
-                  name="playersTournament"
-                  value={
-                    typeof searchParams.playersTournament === "string"
-                      ? searchParams.playersTournament
-                      : ""
-                  }
-                />
                 <input
                   type="hidden"
                   name="showTeams"
@@ -304,7 +334,7 @@ export default function TeamsAndPlayers({
                   id="teams-select"
                   name="teamTournament"
                   defaultValue={selectedTeamsTournamentId ?? ""}
-                  className="bg-white/10 border border-white/20 rounded-lg px-3 py-1 text-sm text-white focus:outline-none"
+                  className="bg-white/10 border border-white/20 rounded-lg px-3 py-2 text-sm text-white focus:outline-none min-w-[170px]"
                 >
                   <option value="">Все турниры</option>
                   {tournamentOptions.map((t) => (
@@ -315,7 +345,7 @@ export default function TeamsAndPlayers({
                 </select>
                 <button
                   type="submit"
-                  className="inline-flex items-center gap-1 rounded-lg px-3 py-1 bg-white/10 border border-white/15 text-white hover:bg-white/15"
+                  className="inline-flex items-center gap-1 rounded-lg px-3 py-2 bg-white/10 border border-white/15 text-white hover:bg-white/15"
                 >
                   Показать
                 </button>
@@ -332,9 +362,9 @@ export default function TeamsAndPlayers({
                 {teams.map((team) => (
                   <div
                     key={`${team.id}-${team.name}`}
-                    className="flex items-center justify-between rounded-2xl bg-white/5 border border-white/10 px-4 py-3 md:px-5 md:py-4 shadow-[0_12px_40px_rgba(0,0,0,0.5)]"
+                    className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl bg-white/5 border border-white/10 px-4 py-3 md:px-5 md:py-4 shadow-[0_12px_40px_rgba(0,0,0,0.5)]"
                   >
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 w-full sm:w-auto">
                       <div className="w-10 h-10 rounded-full bg-vz_purple_dark flex items-center justify-center text-sm font-bold">
                         {team.name[0]}
                       </div>
@@ -348,15 +378,17 @@ export default function TeamsAndPlayers({
                       </div>
                     </div>
 
-                    <span
-                      className={`text-xs md:text-sm px-3 py-1 rounded-full border ${
-                        team.status === "active" || team.status === "confirmed"
-                          ? "border-vz_green text-vz_green"
-                          : "border-white/40 text-white/80"
-                      }`}
-                    >
-                      {teamStatusLabel(team.status)}
-                    </span>
+                    <div className="w-full sm:w-auto sm:text-right">
+                      <span
+                        className={`inline-flex justify-center text-xs md:text-sm px-3 py-1 rounded-full border min-w-[110px] ${
+                          team.status === "active" || team.status === "confirmed"
+                            ? "border-vz_green text-vz_green"
+                            : "border-white/40 text-white/80"
+                        }`}
+                      >
+                        {teamStatusLabel(team.status)}
+                      </span>
+                    </div>
                   </div>
                 ))}
 
@@ -383,113 +415,75 @@ export default function TeamsAndPlayers({
           </div>
 
           <div className="space-y-4">
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
               <div>
                 <h3 className="text-lg md:text-xl font-semibold mb-1">
-                  Топ игроки
+                  Результаты прошлого турнира
                 </h3>
                 <p className="text-xs text-white/60 -mt-1">
-                  Сортировка по рейтингу RP бота — учитываем победы, личную статистику и разницу счёта.
+                  Показываем последние матчи завершённого турнира с максимальным ID.
                 </p>
               </div>
 
-              <form method="get" className="flex items-center gap-2 text-xs">
-                <label className="text-white/60" htmlFor="players-select">
-                  Рейтинг
-                </label>
-                <input
-                  type="hidden"
-                  name="teamTournament"
-                  value={
-                    typeof searchParams.teamTournament === "string"
-                      ? searchParams.teamTournament
-                      : ""
-                  }
-                />
-                <input
-                  type="hidden"
-                  name="showTeams"
-                  value={
-                    typeof searchParams.showTeams === "string"
-                      ? searchParams.showTeams
-                      : ""
-                  }
-                />
-                <select
-                  id="players-select"
-                  name="playersTournament"
-                  defaultValue={selectedPlayersTournamentId ?? ""}
-                  className="bg-white/10 border border-white/20 rounded-lg px-3 py-1 text-sm text-white focus:outline-none"
-                >
-                  <option value="">Глобальный RP</option>
-                  {tournamentOptions
-                    .filter((t) => t.hasRatings)
-                    .map((t) => (
-                      <option key={`p-${t.id}`} value={t.id}>
-                        #{t.id} {t.name || "Турнир"}
-                      </option>
-                    ))}
-                </select>
-                <button
-                  type="submit"
-                  className="inline-flex items-center gap-1 rounded-lg px-3 py-1 bg-white/10 border border-white/15 text-white hover:bg-white/15"
-                >
-                  Показать
-                </button>
-              </form>
+              <span className={`px-3 py-1 rounded-full border text-xs ${statusPill('finished')}`}>
+                {resultsTournamentId ? `Турнир #${resultsTournamentId}` : "Нет данных"}
+              </span>
             </div>
 
             <div className="rounded-2xl bg-white/5 border border-white/10 shadow-[0_16px_50px_rgba(0,0,0,0.6)] overflow-hidden">
               <div className="px-5 py-3 border-b border-white/10 text-xs md:text-sm uppercase tracking-[0.18em] text-white/60">
-                {selectedPlayersTournamentId && playersTournamentName
-                  ? `${playersTournamentName}`
-                  : tournamentHint}
+                {matchesTournamentName || (resultsTournamentId ? `Турнир #${resultsTournamentId}` : "Матчи пока не найдены")}
               </div>
 
-              <ul className="divide-y divide-white/8">
-                {players.length === 0 ? (
-                  <li className="px-5 py-4 text-sm text-white/60">
-                    Статистика игроков появится после первых матчей.
-                  </li>
-                ) : (
-                  players.map((p, index) => (
+              {matches.length === 0 ? (
+                <p className="px-5 py-4 text-sm text-white/60">
+                  Завершённые матчи ещё не выгружены. Как только бот запишет результаты, они появятся здесь.
+                </p>
+              ) : (
+                <ul className="divide-y divide-white/8">
+                  {matches.map((match) => (
                     <li
-                      key={`${p.userId}-${p.rating}`}
-                      className="flex items-center justify-between px-5 py-3 md:py-4"
+                      key={match.id}
+                      className="px-5 py-4 space-y-2"
                     >
-                      <div className="flex items-center gap-3">
-                        <span className="w-7 h-7 md:w-8 md:h-8 rounded-full bg-white/10 flex items-center justify-center text-xs md:text-sm font-semibold">
-                          {index + 1}
-                        </span>
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3">
                         <div className="flex flex-col">
-                          <span className="text-sm md:text-base font-medium">
-                            {p.fullName || `Игрок ${p.userId}`}
+                          <span className="text-sm font-semibold">
+                            {match.teamHomeName} vs {match.teamAwayName}
                           </span>
-                          <span className="text-xs text-white/50">{p.games} игр</span>
+                          <span className="text-[11px] text-white/50">
+                            {match.stage || "Матч"}
+                            {match.groupName ? ` • ${match.groupName}` : ""}
+                            {match.startAt ? ` • ${match.startAt}` : ""}
+                          </span>
                         </div>
+                        <span className="text-lg md:text-xl font-bold text-white">
+                          {match.scoreHome ?? "-"} : {match.scoreAway ?? "-"}
+                        </span>
                       </div>
-                      <span className="text-sm md:text-base font-semibold text-vz_green">
-                        {p.rating.toFixed(1)} RP
+                      <span
+                        className={`inline-flex items-center text-[11px] px-3 py-1 rounded-full border ${statusPill(match.status)}`}
+                      >
+                        {match.status === "finished"
+                          ? "Завершён"
+                          : match.status === "running"
+                            ? "Идёт"
+                            : "Запланирован"}
                       </span>
                     </li>
-                  ))
-                )}
-              </ul>
+                  ))}
+                </ul>
+              )}
             </div>
 
             <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-xs md:text-sm text-white/70 flex flex-wrap gap-2 items-center">
               <span className="inline-flex items-center px-3 py-1 rounded-full border border-white/15 bg-white/5">
-                {selectedPlayersTournamentId ? "Турнирный RP" : "Глобальный RP"}
+                Последний завершённый турнир
               </span>
-              <span>Лидеры: в боте для сверки</span>
-              <span className={`px-3 py-1 rounded-full border ${statusPill(
-                selectedPlayersTournamentId
-                  ? tournamentOptions.find((t) => t.id === selectedPlayersTournamentId)?.status || null
-                  : null
-              )}`}>
-                {selectedPlayersTournamentId
-                  ? `Турнир #${selectedPlayersTournamentId}`
-                  : "Все сезоны"}
+              <span>
+                {matchesTournamentName
+                  ? `Показываем игры турнира “${matchesTournamentName}”`
+                  : "Ждём завершения первого турнира, чтобы показать его матчи"}
               </span>
             </div>
           </div>

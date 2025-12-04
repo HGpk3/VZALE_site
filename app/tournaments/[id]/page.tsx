@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
 
 import { getDb } from "@/lib/db";
+import TournamentSelector from "./TournamentSelector";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -113,6 +113,13 @@ function fetchTournament(id: number): TournamentRow | undefined {
       "SELECT id, name, status, date_start as dateStart, venue, settings_json as settingsJson FROM tournaments WHERE id = ?"
     )
     .get(id) as TournamentRow | undefined;
+}
+
+function fetchTournamentList(): Pick<TournamentRow, "id" | "name">[] {
+  const db = getDb();
+  return db
+    .prepare("SELECT id, name FROM tournaments ORDER BY id DESC")
+    .all() as Pick<TournamentRow, "id" | "name">[];
 }
 
 function parseSettings(settingsJson: string | null) {
@@ -331,25 +338,53 @@ function getPlayerStatsMap(tournamentId: number) {
 }
 
 export default function TournamentPage({ params }: { params: { id: string } }) {
-  const id = Number.parseInt(params.id, 10);
-  if (Number.isNaN(id)) return notFound();
+  const allTournaments = fetchTournamentList();
+  const paramId = Number.parseInt(params.id, 10);
+  const selectedId =
+    Number.isNaN(paramId) || paramId === 0
+      ? allTournaments[0]?.id
+      : paramId;
 
-  const row = fetchTournament(id);
+  if (!selectedId) {
+    return (
+      <main className="min-h-screen w-full bg-gradient-to-b from-[#0B0615] via-[#050309] to-black text-white py-16 md:py-20 px-6 md:px-10">
+        <div className="max-w-4xl mx-auto">
+          <header className="space-y-3 text-center">
+            <h1 className="text-3xl md:text-4xl font-extrabold">Турниры VZALE</h1>
+            <p className="text-sm md:text-base text-white/70">
+              Турниры пока не созданы. Как только бот или админка добавят первый турнир, его можно будет выбрать в списке.
+            </p>
+            <Link
+              href="/tournaments"
+              className="inline-flex items-center gap-2 justify-center text-sm text-white/70 hover:text-white"
+            >
+              ← Ко всем турнирам
+            </Link>
+          </header>
+        </div>
+      </main>
+    );
+  }
+
+  const row = fetchTournament(selectedId);
+  const selectedFromList = allTournaments.find((t) => t.id === selectedId);
+  const selectorOptions = selectedFromList
+    ? allTournaments
+    : [{ id: selectedId, name: `Турнир #${selectedId}` }, ...allTournaments];
+
+  const matches = getMatches(selectedId);
+  const teams = getTeams(selectedId);
+  const hasAnyData = !!row || teams.length > 0 || matches.length > 0;
 
   // Если записи турнира нет (например, в базе сохранились только матчи/составы),
   // всё равно показываем страницу по id и рендерим команды/матчи из БД.
   // 404 отдаём только если совсем нет данных.
-  const fallbackTeams = getTeams(id);
-  const hasAnyData = !!row || fallbackTeams.length > 0 || getMatches(id).length > 0;
-
-  if (!hasAnyData) return notFound();
+  const showEmptyState = !hasAnyData;
 
   const status = normalizeStatus(row?.status ?? null) ?? "draft";
   const settings = row ? parseSettings(row.settingsJson) : null;
   const canRegister = status === "registration_open";
-  const matches = getMatches(id);
-  const playerStatsMap = getPlayerStatsMap(id);
-  const teams = row ? getTeams(id) : fallbackTeams;
+  const playerStatsMap = getPlayerStatsMap(selectedId);
 
   function matchStatusBadge(value: string | null) {
     switch (value) {
@@ -374,10 +409,21 @@ export default function TournamentPage({ params }: { params: { id: string } }) {
       <div className="relative max-w-6xl mx-auto space-y-10">
         {/* Хедер турнира */}
         <header className="space-y-4">
-          <p className="text-xs md:text-sm uppercase tracking-[0.22em] text-white/70">
-            Турнир VZALE #{row?.id ?? id}
-          </p>
-          <h1 className="text-3xl md:text-4xl font-extrabold">{row?.name ?? `Турнир #${id}`}</h1>
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="space-y-2">
+              <p className="text-xs md:text-sm uppercase tracking-[0.22em] text-white/70">
+                Турнир VZALE #{row?.id ?? selectedId}
+              </p>
+              <h1 className="text-3xl md:text-4xl font-extrabold">
+                {row?.name ?? selectedFromList?.name ?? `Турнир #${selectedId}`}
+              </h1>
+            </div>
+
+            <TournamentSelector
+              tournaments={selectorOptions}
+              selectedId={selectedId}
+            />
+          </div>
 
           <div className="flex flex-wrap items-center gap-3 text-sm md:text-base text-white/80">
             {row?.dateStart && <span>{row.dateStart}</span>}
@@ -390,6 +436,16 @@ export default function TournamentPage({ params }: { params: { id: string } }) {
           >
             {statusLabel[status]}
           </span>
+
+          {showEmptyState ? (
+            <div className="mt-4 rounded-2xl border border-white/15 bg-white/5 p-4 text-sm text-white/75">
+              <p className="font-semibold text-white">Данные пока не загружены</p>
+              <p className="mt-1 text-white/70">
+                Мы не нашли запись турнира или связанные матчи и команды. Ссылка останется
+                доступной, как только бот или админка добавят информацию в базу.
+              </p>
+            </div>
+          ) : null}
         </header>
 
         {/* Основной блок */}

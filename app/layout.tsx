@@ -10,6 +10,8 @@ export const metadata: Metadata = {
   description: "Любительские турниры 3x3 нового поколения",
 };
 
+export const dynamic = "force-dynamic";
+
 async function AdminShortcut() {
   const cookieStore = await cookies();
   const telegramIdRaw = cookieStore.get("vzale_telegram_id")?.value;

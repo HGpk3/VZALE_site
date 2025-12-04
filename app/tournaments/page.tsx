@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { getDb } from "@/lib/db";
 import TournamentCard from "../components/Tournaments/TournamentCard";
 
@@ -88,6 +90,14 @@ export default function TournamentsPage() {
             Здесь можно посмотреть ближайшие турниры, те, которые идут прямо
             сейчас, и прошедшие ивенты VZALE.
           </p>
+          <div className="pt-2">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-2 rounded-full border border-vz_text/10 bg-white px-4 py-2 text-sm font-semibold text-vz_text shadow-sm hover:-translate-y-0.5 hover:shadow-md transition"
+            >
+              ← На главную
+            </Link>
+          </div>
         </header>
 
         {tournaments.length === 0 ? (
