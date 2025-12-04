@@ -1,3 +1,7 @@
 #!/bin/bash
+set -e
+
 echo "Starting bot..."
-python3 bot_admin_aiogram3.py
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+python3 bot_final_ready.py
