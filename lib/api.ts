@@ -8,58 +8,26 @@
  * `NEXT_PUBLIC_` prefixed variables.
  */
 
-type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
-
-interface ApiFetchOptions extends Omit<RequestInit, "method"> {
-  method?: HttpMethod;
-  /**
-   * If you need to send JSON, pass the raw object here and it will be stringified.
-   */
-  json?: unknown;
-}
-
 const sanitizeBaseUrl = (url: string) => url.replace(/\/$/, "");
 
-function resolveBaseUrl() {
-  const serverUrl = process.env.API_URL;
-  const clientUrl = process.env.NEXT_PUBLIC_API_URL;
+const API_BASE_URL = sanitizeBaseUrl(
+  process.env.NEXT_PUBLIC_API_URL ?? process.env.API_URL ?? "http://127.0.0.1:8000",
+);
 
-  if (typeof window !== "undefined") {
-    return clientUrl ?? serverUrl ?? "";
-  }
-  return serverUrl ?? clientUrl ?? "";
-}
-
-async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise<T | null> {
-  const baseUrl = resolveBaseUrl();
-  if (!baseUrl) {
-    console.error("[API] Base URL is not configured. Set API_URL/NEXT_PUBLIC_API_URL.");
-    return null;
-  }
-
-  const { json, headers, method = "GET", ...rest } = options;
-
-  const requestInit: RequestInit = {
-    method,
-    ...rest,
-    headers: {
-      Accept: "application/json",
-      ...(json ? { "Content-Type": "application/json" } : {}),
-      ...headers,
-    },
-    ...(json ? { body: JSON.stringify(json) } : {}),
-  };
-
-  const url = `${sanitizeBaseUrl(baseUrl)}${path}`;
+async function apiFetch<T>(path: string, init?: RequestInit, method: string = "GET"): Promise<T | null> {
+  const url = `${API_BASE_URL}${path}`;
+  const requestInit: RequestInit = { method, ...init };
 
   try {
     const response = await fetch(url, requestInit);
+
     if (!response.ok) {
       console.error(`[API] ${method} ${url} failed:`, response.status, response.statusText);
       return null;
     }
-    if (response.status === 204) return null;
-    return (await response.json()) as T;
+
+    const data = (await response.json()) as T;
+    return data;
   } catch (error) {
     console.error(`[API] ${method} ${url} error:`, error);
     return null;
@@ -86,12 +54,20 @@ export type TournamentSummary = {
 export type TeamSummary = {
   id: number;
   name: string;
+  tournamentId?: number | null;
+  status?: string | null;
+  playersCount?: number | null;
 };
 
 export type MatchSummary = {
   id: number;
   tournamentId: number;
   startedAt: string | null;
+  teamHomeName?: string;
+  teamAwayName?: string;
+  scoreHome?: number | null;
+  scoreAway?: number | null;
+  status?: string | null;
 };
 
 export type TeamMemberRow = {
@@ -112,15 +88,18 @@ export async function fetchUserProfile<T = unknown>(telegramId: number) {
 }
 
 export async function fetchTournaments() {
-  return apiFetch<TournamentSummary[]>("/api/tournaments");
+  const data = await apiFetch<TournamentSummary[]>("/api/tournaments");
+  return data ?? [];
 }
 
 export async function fetchTeams() {
-  return apiFetch<TeamSummary[]>("/api/teams");
+  const data = await apiFetch<TeamSummary[]>("/api/teams");
+  return data ?? [];
 }
 
 export async function fetchMatches() {
-  return apiFetch<MatchSummary[]>("/api/matches");
+  const data = await apiFetch<MatchSummary[]>("/api/matches");
+  return data ?? [];
 }
 
 export async function fetchLastTeamForCaptain(telegramId: number) {
@@ -128,4 +107,16 @@ export async function fetchLastTeamForCaptain(telegramId: number) {
   return apiFetch<{ name: string; tournamentId?: number; members: TeamMemberRow[] } | null>(
     `/api/users/${encodeURIComponent(telegramId)}/last-team`
   );
+}
+
+export async function postJson<TResponse = unknown>(path: string, payload: unknown) {
+  return apiFetch<TResponse>(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify(payload ?? {}),
+  });
+}
+
+export async function getFromApi<TResponse = unknown>(path: string) {
+  return apiFetch<TResponse>(path);
 }
