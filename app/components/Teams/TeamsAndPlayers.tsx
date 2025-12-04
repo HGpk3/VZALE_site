@@ -1,6 +1,13 @@
 import Link from "next/link";
 
-import { getDb } from "@/lib/db";
+import { fetchMatches, fetchTeams, fetchTournaments } from "@/lib/api";
+
+type TournamentOption = {
+  id: number;
+  name: string | null;
+  status: string | null;
+  hasTeams: boolean;
+};
 
 type TeamRow = {
   id: number;
@@ -21,177 +28,6 @@ type MatchRow = {
   status: string | null;
   startAt: string | null;
 };
-
-type TournamentOption = {
-  id: number;
-  name: string | null;
-  status: string | null;
-  hasTeams: boolean;
-};
-
-function getTournamentOptions(): TournamentOption[] {
-  const db = getDb();
-  return db
-    .prepare(
-      `
-        SELECT
-          t.id,
-          t.name,
-          t.status,
-          COUNT(DISTINCT tn.id) > 0 AS hasTeams
-        FROM tournaments t
-        LEFT JOIN teams_new tn ON tn.tournament_id = t.id
-        GROUP BY t.id
-        ORDER BY t.id DESC
-      `
-    )
-    .all() as TournamentOption[];
-}
-
-function getLatestFinishedTournamentId(): number | null {
-  const db = getDb();
-  const finished = db
-    .prepare(
-      `
-        SELECT id
-        FROM tournaments
-        WHERE status IN ('finished', 'archived')
-        ORDER BY id DESC
-        LIMIT 1
-      `,
-    )
-    .get() as { id: number } | undefined;
-
-  return finished?.id ?? null;
-}
-
-function getLatestTournamentId(): number | null {
-  const db = getDb();
-  const populated = db
-    .prepare(
-      `
-        SELECT t.id
-        FROM tournaments t
-        LEFT JOIN teams_new tn ON tn.tournament_id = t.id
-        LEFT JOIN player_ratings_by_tournament prt ON prt.tournament_id = t.id
-        GROUP BY t.id
-        HAVING COUNT(tn.id) > 0 OR COUNT(prt.user_id) > 0
-        ORDER BY
-          CASE WHEN t.status = 'running' THEN 1 ELSE 0 END DESC,
-          CASE WHEN t.status = 'registration_open' THEN 1 ELSE 0 END DESC,
-          t.id DESC
-        LIMIT 1
-      `
-    )
-    .get() as { id: number } | undefined;
-
-  if (populated?.id) return populated.id;
-
-  const fallback = db
-    .prepare(
-      `
-        SELECT id
-        FROM tournaments
-        ORDER BY
-          CASE WHEN status = 'running' THEN 1 ELSE 0 END DESC,
-          CASE WHEN status = 'registration_open' THEN 1 ELSE 0 END DESC,
-          id DESC
-        LIMIT 1
-      `
-    )
-    .get() as { id: number } | undefined;
-
-  return fallback?.id ?? null;
-}
-
-function getLatestResultsTournamentId(): number | null {
-  const db = getDb();
-
-  const row = db
-    .prepare(
-      `
-        SELECT ms.tournament_id AS id
-        FROM matches_simple ms
-        WHERE ms.score_home IS NOT NULL AND ms.score_away IS NOT NULL
-        GROUP BY ms.tournament_id
-        ORDER BY ms.tournament_id DESC
-        LIMIT 1
-      `,
-    )
-    .get() as { id: number } | undefined;
-
-  if (row?.id) return row.id;
-
-  const latestFinished = getLatestFinishedTournamentId();
-  if (latestFinished) return latestFinished;
-
-  return getLatestTournamentId();
-}
-
-function getTeams(
-  tournamentId: number | null,
-  limit: number
-): TeamRow[] {
-  const db = getDb();
-
-  return db
-    .prepare(
-      `
-        SELECT
-          tn.id,
-          tn.name,
-          tn.status,
-          tn.tournament_id AS tournamentId,
-          COUNT(tm.user_id) AS playersCount
-        FROM teams_new tn
-        LEFT JOIN team_members tm ON tm.team_id = tn.id
-        WHERE (? IS NULL OR tn.tournament_id = ?)
-        GROUP BY tn.id
-        ORDER BY tn.created_at DESC
-        LIMIT ?
-      `
-    )
-    .all(tournamentId, tournamentId, limit) as TeamRow[];
-}
-
-function getTournamentName(tournamentId: number | null): string | null {
-  if (!tournamentId) return null;
-  const db = getDb();
-  const row = db
-    .prepare("SELECT name FROM tournaments WHERE id = ?")
-    .get(tournamentId) as { name: string | null } | undefined;
-  return row?.name ?? null;
-}
-
-function getLatestMatchesForTournament(
-  tournamentId: number | null,
-  limit: number,
-): MatchRow[] {
-  if (!tournamentId) return [];
-
-  const db = getDb();
-  return db
-    .prepare(
-      `
-        SELECT
-          ms.id,
-          ms.team_home_name AS teamHomeName,
-          ms.team_away_name AS teamAwayName,
-          ms.score_home AS scoreHome,
-          ms.score_away AS scoreAway,
-          COALESCE(m.stage, ms.stage) AS stage,
-          m.group_name AS groupName,
-          COALESCE(m.status, ms.status) AS status,
-          m.start_at AS startAt
-        FROM matches_simple ms
-        LEFT JOIN matches m ON m.id = ms.id
-        WHERE ms.tournament_id = ?
-        ORDER BY COALESCE(m.start_at, ms.id) DESC
-        LIMIT ?
-      `
-    )
-    .all(tournamentId, limit) as MatchRow[];
-}
 
 function parseNumber(value: string | string[] | undefined): number | null {
   if (Array.isArray(value)) return parseNumber(value[0]);
@@ -230,7 +66,7 @@ function statusPill(status: string | null) {
 
 function buildQuery(
   current: Record<string, string | string[] | undefined>,
-  next: Record<string, string | undefined>
+  next: Record<string, string | undefined>,
 ) {
   const params = new URLSearchParams();
   Object.entries(current).forEach(([key, value]) => {
@@ -253,28 +89,85 @@ function buildQuery(
   return search ? `?${search}` : "";
 }
 
-export default function TeamsAndPlayers({
+async function getTournamentOptions(): Promise<TournamentOption[]> {
+  const tournaments = await fetchTournaments();
+  if (!tournaments) return [];
+
+  return tournaments.map((t) => ({
+    id: t.id,
+    name: t.name ?? null,
+    status: t.status ?? null,
+    hasTeams: Boolean(t.status),
+  }));
+}
+
+function pickLatestTournamentId(options: TournamentOption[]): number | null {
+  if (options.length === 0) return null;
+  const finished = options.find((t) => t.status === "finished" || t.status === "archived");
+  if (finished) return finished.id;
+  return options[0]?.id ?? null;
+}
+
+async function getTeams(tournamentId: number | null, limit: number): Promise<TeamRow[]> {
+  const teams = await fetchTeams();
+  if (!teams) return [];
+
+  const filtered = tournamentId
+    ? teams.filter((t) => (t.tournamentId ?? null) === tournamentId)
+    : teams;
+
+  return filtered.slice(0, limit).map((team) => ({
+    id: team.id,
+    name: team.name,
+    status: team.status ?? null,
+    playersCount: team.playersCount ?? 0,
+    tournamentId: team.tournamentId ?? null,
+  }));
+}
+
+async function getLatestMatchesForTournament(
+  tournamentId: number | null,
+  limit: number,
+): Promise<MatchRow[]> {
+  const matches = await fetchMatches();
+  if (!matches || matches.length === 0 || !tournamentId) return [];
+
+  return matches
+    .filter((m) => m.tournamentId === tournamentId)
+    .sort((a, b) => (b.startedAt || "").localeCompare(a.startedAt || ""))
+    .slice(0, limit)
+    .map((m) => ({
+      id: m.id,
+      teamHomeName: m.teamHomeName ?? "Команда",
+      teamAwayName: m.teamAwayName ?? "Соперник",
+      scoreHome: m.scoreHome ?? null,
+      scoreAway: m.scoreAway ?? null,
+      stage: m.startedAt ?? null,
+      groupName: null,
+      status: m.status ?? null,
+      startAt: m.startedAt ?? null,
+    }));
+}
+
+export default async function TeamsAndPlayers({
   searchParams,
 }: {
   searchParams: Record<string, string | string[] | undefined>;
 }) {
-  const tournamentOptions = getTournamentOptions();
-  const latestTournamentId = getLatestTournamentId();
-  const latestFinishedTournamentId = getLatestFinishedTournamentId();
-  const latestResultsTournamentId = getLatestResultsTournamentId();
+  const tournamentOptions = await getTournamentOptions();
+  const latestFinishedTournamentId = pickLatestTournamentId(tournamentOptions);
 
-  const defaultTeamsTournamentId =
-    latestFinishedTournamentId ?? latestTournamentId;
+  const defaultTeamsTournamentId = tournamentOptions[0]?.id ?? latestFinishedTournamentId;
 
   const selectedTeamsTournamentId =
     parseNumber(searchParams.teamTournament) ?? defaultTeamsTournamentId;
   const showAllTeams = (searchParams.showTeams as string) === "all";
   const teamsLimit = showAllTeams ? 50 : 6;
 
-  const teams = getTeams(selectedTeamsTournamentId, teamsLimit);
-  const resultsTournamentId = latestResultsTournamentId;
-  const matches = getLatestMatchesForTournament(resultsTournamentId, 8);
-  const matchesTournamentName = getTournamentName(resultsTournamentId);
+  const teams = await getTeams(selectedTeamsTournamentId, teamsLimit);
+  const resultsTournamentId = latestFinishedTournamentId;
+  const matches = await getLatestMatchesForTournament(resultsTournamentId, 8);
+  const matchesTournamentName = tournamentOptions.find((t) => t.id === resultsTournamentId)?.name;
 
   const hasMoreTeams = !showAllTeams && teams.length === teamsLimit;
 
@@ -292,8 +185,7 @@ export default function TeamsAndPlayers({
               Команды и результаты
             </h2>
             <p className="text-sm md:text-base text-white/70 max-w-md">
-              Фильтруйте команды по турнирам и смотрите свежие результаты
-              последнего завершённого ивента.
+              Фильтруйте команды по турнирам и смотрите свежие результаты последнего завершённого ивента.
             </p>
           </div>
 
@@ -354,8 +246,7 @@ export default function TeamsAndPlayers({
 
             {teams.length === 0 ? (
               <p className="text-sm text-white/60">
-                Пока нет активных команд. Как только в базе появятся заявки или
-                составы, они появятся здесь.
+                Пока нет активных команд или сервис временно недоступен. Как только в базе появятся заявки, они появятся здесь.
               </p>
             ) : (
               <div className="space-y-3">
@@ -425,7 +316,7 @@ export default function TeamsAndPlayers({
                 </p>
               </div>
 
-              <span className={`px-3 py-1 rounded-full border text-xs ${statusPill('finished')}`}>
+              <span className={`px-3 py-1 rounded-full border text-xs ${statusPill("finished")}`}>
                 {resultsTournamentId ? `Турнир #${resultsTournamentId}` : "Нет данных"}
               </span>
             </div>
@@ -437,7 +328,7 @@ export default function TeamsAndPlayers({
 
               {matches.length === 0 ? (
                 <p className="px-5 py-4 text-sm text-white/60">
-                  Завершённые матчи ещё не выгружены. Как только бот запишет результаты, они появятся здесь.
+                  Завершённые матчи ещё не выгружены или сервис временно недоступен.
                 </p>
               ) : (
                 <ul className="divide-y divide-white/8">

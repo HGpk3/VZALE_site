@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import { getDb } from "@/lib/db";
+import { fetchTournaments, type TournamentSummary } from "@/lib/api";
 
 type TournamentStatus =
   | "draft"
@@ -9,18 +9,12 @@ type TournamentStatus =
   | "closed"
   | "running"
   | "finished"
-  | "archived";
+  | "archived"
+  | "published"
+  | "upcoming"
+  | "active";
 
-type TournamentRow = {
-  id: number;
-  name: string;
-  status: string | null;
-  dateStart: string | null;
-  venue: string | null;
-  settingsJson: string | null;
-};
-
-const statusLabel: Record<TournamentStatus, string> = {
+const statusLabel: Partial<Record<TournamentStatus, string>> = {
   draft: "Черновик",
   announced: "Анонс",
   registration_open: "Регистрация открыта",
@@ -28,9 +22,12 @@ const statusLabel: Record<TournamentStatus, string> = {
   running: "Турнир идёт",
   finished: "Турнир завершён",
   archived: "Архив",
+  published: "Скоро объявим",
+  upcoming: "Скоро старт",
+  active: "Идет сейчас",
 };
 
-const statusBadge: Record<TournamentStatus, string> = {
+const statusBadge: Partial<Record<TournamentStatus, string>> = {
   draft: "border-white/30 text-white/80",
   announced: "border-vz_purple/60 text-vz_purple",
   registration_open: "border-vz_green/80 text-vz_green",
@@ -38,64 +35,53 @@ const statusBadge: Record<TournamentStatus, string> = {
   running: "border-emerald-300/70 text-emerald-200",
   finished: "border-white/30 text-white/70",
   archived: "border-white/20 text-white/60",
+  published: "border-vz_purple/60 text-vz_purple",
+  upcoming: "border-vz_green/80 text-vz_green",
+  active: "border-emerald-300/70 text-emerald-200",
 };
 
 function normalizeStatus(status: string | null): TournamentStatus | null {
   if (!status) return null;
-  if (
-    [
-      "draft",
-      "announced",
-      "registration_open",
-      "closed",
-      "running",
-      "finished",
-      "archived",
-    ].includes(status)
-  ) {
+  const known: TournamentStatus[] = [
+    "draft",
+    "announced",
+    "registration_open",
+    "closed",
+    "running",
+    "finished",
+    "archived",
+    "published",
+    "upcoming",
+    "active",
+  ];
+
+  if (known.includes(status as TournamentStatus)) {
     return status as TournamentStatus;
   }
+
   return null;
 }
 
-function parseSettings(settingsJson: string | null) {
-  if (!settingsJson) return null;
+async function fetchUpcomingTournament(): Promise<TournamentSummary | null> {
   try {
-    return JSON.parse(settingsJson) as {
-      description?: string;
-      format?: string;
-    };
-  } catch (err) {
-    console.error("[upcoming] failed to parse settings_json", err);
+    const tournaments = await fetchTournaments();
+    if (!tournaments || tournaments.length === 0) return null;
+
+    const upcoming =
+      tournaments.find((t) => t.status === "published") ??
+      tournaments.find((t) => t.status === "upcoming") ??
+      tournaments.find((t) => t.status === "active") ??
+      tournaments[0];
+
+    return upcoming ?? null;
+  } catch (error) {
+    console.error("[UpcomingTournament] Failed to fetch tournaments", error);
     return null;
   }
 }
 
-function fetchUpcomingTournament(): (TournamentRow & { settings?: ReturnType<typeof parseSettings> }) | null {
-  const db = getDb();
-
-  const row = db
-    .prepare(
-      `
-        SELECT id, name, status, date_start as dateStart, venue, settings_json as settingsJson
-        FROM tournaments
-        WHERE status IN ('registration_open', 'announced', 'running')
-        ORDER BY (date_start IS NULL) ASC, date_start ASC, id DESC
-        LIMIT 1
-      `
-    )
-    .get() as TournamentRow | undefined;
-
-  if (!row) return null;
-
-  return {
-    ...row,
-    settings: parseSettings(row.settingsJson),
-  };
-}
-
-export default function UpcomingTournament() {
-  const tournament = fetchUpcomingTournament();
+export default async function UpcomingTournament() {
+  const tournament = await fetchUpcomingTournament();
 
   if (!tournament) {
     return (
@@ -131,11 +117,10 @@ export default function UpcomingTournament() {
   }
 
   const status = normalizeStatus(tournament.status) ?? "draft";
-  const canRegister = status === "registration_open";
+  const canRegister = status === "registration_open" || status === "upcoming" || status === "published";
   const description =
-    tournament.settings?.description ||
-    "Динамичный турнир 3×3 с живой атмосферой, музыкой и медиа-поддержкой.";
-  const format = tournament.settings?.format || "Любительский 3×3";
+    "Динамичный турнир 3×3 с живой атмосферой, музыкой и медиа-поддержкой. Следите за обновлениями, чтобы не пропустить старт.";
+  const format = "Любительский 3×3";
 
   return (
     <section className="relative w-full py-20 px-6 md:px-10 bg-gradient-to-b from-[#15082A] via-[#0A0616] to-[#050309] text-white">
@@ -149,7 +134,7 @@ export default function UpcomingTournament() {
           <span
             className={`inline-flex items-center text-sm md:text-base px-4 py-2 rounded-full border bg-white/5 backdrop-blur-sm ${statusBadge[status]}`}
           >
-            {statusLabel[status]}
+            {statusLabel[status] ?? "Статус уточняется"}
           </span>
         </div>
 

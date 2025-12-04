@@ -17,7 +17,7 @@ export default async function AdminPage() {
     redirect("/me");
   }
 
-  const tournaments = fetchAllTournaments().map((t) => ({
+  const tournaments = (await fetchAllTournaments()).map((t) => ({
     ...t,
     status: t.status ?? undefined,
   }));

@@ -1,65 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDb } from "@/lib/db";
+
+import { postJson } from "@/lib/api";
 import { isAdmin } from "@/lib/admin";
 
 export async function POST(req: NextRequest) {
   try {
     const telegramId = req.cookies.get("vzale_telegram_id")?.value;
     if (!isAdmin(telegramId ? Number(telegramId) : null)) {
-      return NextResponse.json(
-        { ok: false, error: "Недостаточно прав" },
-        { status: 403 }
-      );
+      return NextResponse.json({ ok: false, error: "Недостаточно прав" }, { status: 403 });
     }
 
     const body = await req.json();
-    const tournamentId = Number(body?.id);
-    const status = (body?.status as string | undefined)?.trim();
+    const result = await postJson<{ ok: boolean; error?: string }>("/api/admin/tournaments/status", body);
 
-    if (!tournamentId || !status) {
-      return NextResponse.json(
-        { ok: false, error: "Нужно указать турнир и статус" },
-        { status: 400 }
-      );
+    if (!result) {
+      return NextResponse.json({ ok: false, error: "Сервис временно недоступен" }, { status: 502 });
     }
 
-    const allowed = [
-      "draft",
-      "announced",
-      "registration_open",
-      "closed",
-      "running",
-      "finished",
-      "archived",
-    ];
-
-    if (!allowed.includes(status)) {
-      return NextResponse.json(
-        { ok: false, error: "Недопустимый статус" },
-        { status: 400 }
-      );
+    if (!result.ok) {
+      return NextResponse.json({ ok: false, error: result.error || "Не удалось обновить турнир" }, { status: 500 });
     }
 
-    const db = getDb();
-    const exists = db
-      .prepare("SELECT id FROM tournaments WHERE id = ?")
-      .get(tournamentId) as { id: number } | undefined;
-
-    if (!exists) {
-      return NextResponse.json(
-        { ok: false, error: "Турнир не найден" },
-        { status: 404 }
-      );
-    }
-
-    db.prepare("UPDATE tournaments SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(status, tournamentId);
-
-    return NextResponse.json({ ok: true });
+    return NextResponse.json(result);
   } catch (err) {
-    console.error("[admin:update-status]", err);
-    return NextResponse.json(
-      { ok: false, error: "Не удалось обновить статус" },
-      { status: 500 }
-    );
+    console.error("[admin:update-tournament-status]", err);
+    return NextResponse.json({ ok: false, error: "Не удалось обновить турнир" }, { status: 500 });
   }
 }
