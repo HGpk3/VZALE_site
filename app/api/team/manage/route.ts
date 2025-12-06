@@ -16,23 +16,35 @@ function getTeamForCaptain(teamId: number, captainId: number) {
           tn.name,
           tn.tournament_id AS tournamentId,
           tn.captain_user_id AS captainUserId,
-          tm.role
+          tm.role,
+          tr.is_captain AS rosterCaptain
         FROM teams_new tn
         LEFT JOIN team_members tm ON tm.team_id = tn.id AND tm.user_id = ?
+        LEFT JOIN tournament_roster tr
+          ON tr.tournament_id = tn.tournament_id
+          AND tr.team_name = tn.name
+          AND tr.user_id = ?
         WHERE tn.id = ?
       `,
     )
-    .get(captainId, teamId) as
+    .get(captainId, captainId, teamId) as
     | {
         id: number;
         name: string;
         tournamentId: number | null;
         captainUserId: number | null;
         role: string | null;
+        rosterCaptain: number | null;
       }
     | undefined;
 
-  if (!row || (row.captainUserId !== captainId && row.role !== "captain")) return null;
+  const isCaptainFromRoster = row?.rosterCaptain === 1;
+
+  if (
+    !row ||
+    (row.captainUserId !== captainId && row.role !== "captain" && !isCaptainFromRoster)
+  )
+    return null;
   return { id: row.id, name: row.name, tournamentId: row.tournamentId };
 }
 
@@ -61,6 +73,7 @@ function fetchTeamPayload(teamId: number) {
           tn.id,
           tn.name,
           tn.tournament_id AS tournamentId,
+          tn.captain_user_id AS captainUserId,
           COALESCE(ttn.paid, 0) AS paid,
           t.name AS tournamentName,
           ts.invite_code AS inviteCode
@@ -77,6 +90,7 @@ function fetchTeamPayload(teamId: number) {
         id: number;
         name: string;
         tournamentId: number | null;
+        captainUserId: number | null;
         paid: number;
         tournamentName: string | null;
         inviteCode: string | null;
@@ -94,14 +108,21 @@ function fetchTeamPayload(teamId: number) {
           u.full_name AS fullName,
           tm.role,
           tm.status,
-          CASE WHEN tm.role = 'captain' THEN 1 ELSE 0 END AS isCaptain
+          CASE
+            WHEN tm.role = 'captain' THEN 1
+            WHEN tr.is_captain = 1 THEN 1
+            WHEN tm.user_id = ? THEN 1
+            ELSE 0
+          END AS isCaptain
         FROM team_members tm
         LEFT JOIN users u ON u.user_id = tm.user_id
+        LEFT JOIN tournament_roster tr
+          ON tr.tournament_id = ? AND tr.team_name = ? AND tr.user_id = tm.user_id
         WHERE tm.team_id = ?
         ORDER BY isCaptain DESC, COALESCE(u.full_name, '') ASC, tm.user_id ASC
       `,
     )
-    .all(teamId) as {
+    .all(team.captainUserId ?? 0, team.tournamentId, team.name, teamId) as {
     teamId: number;
     userId: number;
     fullName: string | null;

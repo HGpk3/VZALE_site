@@ -262,9 +262,19 @@ function getRostersForTeams(teamIds: number[]): Map<number, CaptainRosterRow[]> 
           u.full_name AS fullName,
           tm.role,
           tm.status,
-          CASE WHEN tm.role = 'captain' THEN 1 ELSE 0 END AS isCaptain
+          CASE
+            WHEN tm.role = 'captain' THEN 1
+            WHEN tr.is_captain = 1 THEN 1
+            WHEN tm.user_id = tn.captain_user_id THEN 1
+            ELSE 0
+          END AS isCaptain
         FROM team_members tm
+        LEFT JOIN teams_new tn ON tn.id = tm.team_id
         LEFT JOIN users u ON u.user_id = tm.user_id
+        LEFT JOIN tournament_roster tr
+          ON tr.tournament_id = tn.tournament_id
+          AND tr.team_name = tn.name
+          AND tr.user_id = tm.user_id
         WHERE tm.team_id IN (${placeholders})
         ORDER BY tm.team_id, isCaptain DESC, COALESCE(u.full_name, '') ASC, tm.user_id ASC
       `,

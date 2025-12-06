@@ -6,11 +6,13 @@ import TeamsAndPlayers from "./components/Teams/TeamsAndPlayers";
 import Footer from "./components/Footer/Footer";
 import LayeredScrollLayout, { Section } from "./components/LayeredScrollLayout";
 
-export default function Home({
+export default async function Home({
   searchParams,
 }: {
-  searchParams: Record<string, string | string[] | undefined>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
+  const resolvedSearchParams = await searchParams;
+
   const sections: Section[] = [
     {
       id: "hero",
@@ -30,7 +32,7 @@ export default function Home({
     },
     {
       id: "teams",
-      content: <TeamsAndPlayers searchParams={searchParams} />,
+      content: <TeamsAndPlayers searchParams={resolvedSearchParams} />,
       backgroundColor: "#060710",
     },
     {
