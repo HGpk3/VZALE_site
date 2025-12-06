@@ -2,7 +2,7 @@ import Image from "next/image";
 
 export default function About() {
   return (
-    <section className="relative w-full bg-white/70 backdrop-blur-xl py-20 md:py-28 px-6 md:px-10">
+    <section className="relative w-full bg-white/70 backdrop-blur-xl py-20 md:py-28 px-6 md:px-10 appear-block">
       <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-12 items-center">
         {/* Левый блок — текст */}
         <div className="space-y-6">

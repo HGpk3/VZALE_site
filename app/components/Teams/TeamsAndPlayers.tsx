@@ -279,7 +279,7 @@ export default function TeamsAndPlayers({
   const hasMoreTeams = !showAllTeams && teams.length === teamsLimit;
 
   return (
-    <section className="relative w-full py-16 md:py-24 px-4 sm:px-6 md:px-10 bg-gradient-to-b from-[#0B0615] via-[#050309] to-black text-white">
+    <section className="relative w-full py-16 md:py-24 px-4 sm:px-6 md:px-10 bg-gradient-to-b from-[#0B0615] via-[#050309] to-black text-white appear-block">
       <div className="pointer-events-none absolute inset-0 opacity-40">
         <div className="absolute -top-10 left-0 w-[280px] h-[200px] bg-vz_purple blur-[110px]" />
         <div className="absolute bottom-0 right-10 w-[260px] h-[220px] bg-vz_green blur-[110px]" />

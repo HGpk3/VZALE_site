@@ -99,7 +99,7 @@ export default function UpcomingTournament() {
 
   if (!tournament) {
     return (
-      <section className="relative w-full py-20 px-6 md:px-10 bg-gradient-to-b from-[#15082A] via-[#0A0616] to-[#050309] text-white">
+      <section className="relative w-full py-20 px-6 md:px-10 bg-gradient-to-b from-[#15082A] via-[#0A0616] to-[#050309] text-white appear-block">
         <div className="max-w-6xl mx-auto space-y-6">
           <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
             <div>
@@ -138,7 +138,7 @@ export default function UpcomingTournament() {
   const format = tournament.settings?.format || "Любительский 3×3";
 
   return (
-    <section className="relative w-full py-20 px-6 md:px-10 bg-gradient-to-b from-[#15082A] via-[#0A0616] to-[#050309] text-white">
+    <section className="relative w-full py-20 px-6 md:px-10 bg-gradient-to-b from-[#15082A] via-[#0A0616] to-[#050309] text-white appear-block">
       <div className="max-w-6xl mx-auto">
         <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-10">
           <div>
