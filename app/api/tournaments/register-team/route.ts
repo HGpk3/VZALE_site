@@ -69,8 +69,29 @@ export async function POST(req: NextRequest) {
     const newTeamId = Number(result.lastInsertRowid);
 
     db.prepare(
+      "INSERT OR IGNORE INTO tournament_team_names (tournament_id, name, paid) VALUES (?, ?, 0)"
+    ).run(tournamentId, teamName);
+
+    db.prepare(
       "INSERT OR IGNORE INTO team_members (team_id, user_id, role, status, tournament_id) VALUES (?, ?, 'captain', 'confirmed', ?)"
     ).run(newTeamId, telegramId, tournamentId);
+
+    const captain = db
+      .prepare("SELECT full_name AS fullName FROM users WHERE user_id = ?")
+      .get(telegramId) as { fullName?: string | null } | undefined;
+
+    db.prepare(
+      `
+        INSERT OR IGNORE INTO tournament_roster (
+          tournament_id,
+          user_id,
+          team_name,
+          full_name,
+          is_captain
+        )
+        VALUES (?, ?, ?, ?, 1)
+      `
+    ).run(tournamentId, telegramId, teamName, captain?.fullName ?? null);
 
     let copiedMembers = 0;
     const lastTeam = db
@@ -92,6 +113,29 @@ export async function POST(req: NextRequest) {
 
       for (const member of members) {
         insertMember.run(newTeamId, member.userId, member.role || "player", member.status || "pending", tournamentId);
+        const memberNameRow = db
+          .prepare("SELECT full_name AS fullName FROM users WHERE user_id = ?")
+          .get(member.userId) as { fullName?: string | null } | undefined;
+
+        db.prepare(
+          `
+            INSERT OR IGNORE INTO tournament_roster (
+              tournament_id,
+              user_id,
+              team_name,
+              full_name,
+              is_captain
+            )
+            VALUES (?, ?, ?, ?, CASE WHEN ? = ? THEN 1 ELSE 0 END)
+          `
+        ).run(
+          tournamentId,
+          member.userId,
+          teamName,
+          memberNameRow?.fullName ?? null,
+          member.userId,
+          telegramId
+        );
         copiedMembers += 1;
       }
     }

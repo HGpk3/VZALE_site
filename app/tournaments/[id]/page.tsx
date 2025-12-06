@@ -24,6 +24,15 @@ type TournamentRow = {
   settingsJson: string | null;
 };
 
+type TournamentSettings = {
+  description?: string;
+  format?: string;
+  prizes?: string;
+  mapEmbed?: string;
+  mapQuery?: string;
+  brackets?: { key: string; title: string; embedUrl?: string; note?: string }[];
+};
+
 type MatchRow = {
   id: number;
   stage: string | null;
@@ -38,8 +47,10 @@ type MatchRow = {
 };
 
 type TeamRow = {
+  id: number;
   name: string;
   paid: number;
+  tournamentId: number;
 };
 
 type RosterRow = {
@@ -122,14 +133,10 @@ function fetchTournamentList(): Pick<TournamentRow, "id" | "name">[] {
     .all() as Pick<TournamentRow, "id" | "name">[];
 }
 
-function parseSettings(settingsJson: string | null) {
+function parseSettings(settingsJson: string | null): TournamentSettings | null {
   if (!settingsJson) return null;
   try {
-    return JSON.parse(settingsJson) as {
-      description?: string;
-      format?: string;
-      prizes?: string;
-    };
+    return JSON.parse(settingsJson) as TournamentSettings;
   } catch (err) {
     console.error("[tournament] failed to parse settings_json", err);
     return null;
@@ -167,74 +174,50 @@ function getTeams(tournamentId: number): TeamWithRoster[] {
   let teams = db
     .prepare(
       `
-        SELECT name, paid
-        FROM tournament_team_names
-        WHERE tournament_id = ?
-        ORDER BY paid DESC, name ASC
+        SELECT
+          tn.id,
+          tn.name,
+          tn.tournament_id AS tournamentId,
+          COALESCE(ttn.paid, 0) AS paid
+        FROM teams_new tn
+        LEFT JOIN tournament_team_names ttn
+          ON ttn.tournament_id = tn.tournament_id AND ttn.name = tn.name
+        WHERE tn.tournament_id = ?
+        ORDER BY COALESCE(ttn.paid, 0) DESC, tn.name ASC
       `,
     )
     .all(tournamentId) as TeamRow[];
 
-  // Для старых турниров, где таблица имен команд могла не заполняться, собираем названия
-  // из заявок и матчей, чтобы страница не была пустой.
   if (teams.length === 0) {
-    const rosterTeams = db
+    teams = db
       .prepare(
         `
-          SELECT DISTINCT team_name AS name, 0 AS paid
-          FROM tournament_roster
-          WHERE tournament_id = ?
-          ORDER BY name ASC
+          SELECT
+            COALESCE(ttn.rowid, 0) AS id,
+            ttn.name,
+            ttn.tournament_id AS tournamentId,
+            ttn.paid
+          FROM tournament_team_names ttn
+          WHERE ttn.tournament_id = ?
+          ORDER BY ttn.paid DESC, ttn.name ASC
         `,
       )
       .all(tournamentId) as TeamRow[];
-
-    const matchTeams = db
-      .prepare(
-        `
-          SELECT DISTINCT team_home_name AS name, 0 AS paid
-          FROM matches_simple
-          WHERE tournament_id = ?
-          UNION
-          SELECT DISTINCT team_away_name AS name, 0 AS paid
-          FROM matches_simple
-          WHERE tournament_id = ?
-        `,
-      )
-      .all(tournamentId, tournamentId) as TeamRow[];
-
-    const merged = new Map<string, TeamRow>();
-    [...rosterTeams, ...matchTeams].forEach((team) => {
-      if (team.name) merged.set(team.name, team);
-    });
-    teams = Array.from(merged.values()).sort((a, b) => a.name.localeCompare(b.name));
-
-    // Если и так не нашли, показываем общий список команд из таблицы teams,
-    // как это делает бот.
-    if (teams.length === 0) {
-      teams = db
-        .prepare(
-          `
-            SELECT DISTINCT team_name AS name, 0 AS paid
-            FROM teams
-            ORDER BY team_name ASC
-          `,
-        )
-        .all() as TeamRow[];
-    }
   }
 
   let rosterRows = db
     .prepare(
       `
         SELECT
-          team_name AS teamName,
-          user_id AS userId,
-          full_name AS fullName,
-          is_captain AS isCaptain
-        FROM tournament_roster
-        WHERE tournament_id = ?
-        ORDER BY is_captain DESC, full_name ASC
+          tn.name AS teamName,
+          tm.user_id AS userId,
+          u.full_name AS fullName,
+          CASE WHEN tm.role = 'captain' THEN 1 ELSE 0 END AS isCaptain
+        FROM team_members tm
+        JOIN teams_new tn ON tn.id = tm.team_id
+        LEFT JOIN users u ON u.user_id = tm.user_id
+        WHERE tn.tournament_id = ?
+        ORDER BY isCaptain DESC, COALESCE(u.full_name, '') ASC, tm.user_id ASC
       `,
     )
     .all(tournamentId) as RosterRow[];
@@ -249,14 +232,12 @@ function getTeams(tournamentId: number): TeamWithRoster[] {
             member_id AS userId,
             member_name AS fullName,
             0 AS isCaptain
-          FROM teams
-          WHERE team_name IN (
-            SELECT DISTINCT team_name FROM teams
-          )
+          FROM tournament_roster
+          WHERE tournament_id = ?
           ORDER BY team_name ASC, member_name ASC
         `,
       )
-      .all() as RosterRow[];
+      .all(tournamentId) as RosterRow[];
   }
 
   const rosterMap = new Map<string, RosterRow[]>();
@@ -337,6 +318,16 @@ function getPlayerStatsMap(tournamentId: number) {
   return map;
 }
 
+function mapEmbedUrl(settings: TournamentSettings | null, venue: string | null) {
+  const direct = settings?.mapEmbed?.trim();
+  if (direct) return direct;
+
+  const query = settings?.mapQuery?.trim() || venue?.trim();
+  if (!query) return null;
+
+  return `https://yandex.ru/map-widget/v1/?text=${encodeURIComponent(query)}&z=15&l=map`;
+}
+
 export default function TournamentPage({ params }: { params: { id: string } }) {
   const allTournaments = fetchTournamentList();
   const paramId = Number.parseInt(params.id, 10);
@@ -385,6 +376,22 @@ export default function TournamentPage({ params }: { params: { id: string } }) {
   const settings = row ? parseSettings(row.settingsJson) : null;
   const canRegister = status === "registration_open";
   const playerStatsMap = getPlayerStatsMap(selectedId);
+  const mapUrl = mapEmbedUrl(settings, row?.venue ?? null);
+  const bracketOptions =
+    settings?.brackets && settings.brackets.length > 0
+      ? settings.brackets
+      : [
+          {
+            key: "groups_playoff",
+            title: "Группы + плей-офф",
+            note: "Добавьте ссылку на сетку, чтобы участники видели посев и плей-офф.",
+          },
+          {
+            key: "double_elim",
+            title: "Верхняя и нижняя сетка",
+            note: "Поддерживается двойное выбывание — загрузите embed ссылки в настройках турнира.",
+          },
+        ];
 
   function matchStatusBadge(value: string | null) {
     switch (value) {
@@ -505,6 +512,76 @@ export default function TournamentPage({ params }: { params: { id: string } }) {
           </aside>
         </section>
 
+        <section className="grid gap-6 md:grid-cols-2 items-start">
+          <div className="rounded-3xl bg-white/5 border border-white/10 p-6 md:p-7 shadow-[0_20px_60px_rgba(0,0,0,0.6)] space-y-4">
+            <div className="flex items-center gap-2">
+              <span className="text-xs uppercase tracking-[0.2em] text-white/60">Локация</span>
+              <span className="text-[10px] rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-white/60">
+                Яндекс.Карты
+              </span>
+            </div>
+            <h2 className="text-xl md:text-2xl font-semibold">Где проходит турнир</h2>
+            <p className="text-sm md:text-base text-white/75">
+              {row?.venue || settings?.mapQuery || "Организатор укажет площадку позже."}
+            </p>
+            {mapUrl ? (
+              <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/40">
+                <iframe
+                  src={mapUrl}
+                  title="Карта площадки"
+                  className="w-full h-[280px] md:h-[320px]"
+                  allowFullScreen
+                  loading="lazy"
+                />
+              </div>
+            ) : (
+              <div className="rounded-xl border border-dashed border-white/15 bg-black/30 p-4 text-sm text-white/60">
+                Добавьте адрес или embed ссылку на Яндекс.Карты в настройках турнира, чтобы показать точку на карте.
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-3xl bg-white/5 border border-white/10 p-6 md:p-7 shadow-[0_20px_60px_rgba(0,0,0,0.6)] space-y-4">
+            <div className="flex items-center gap-2 justify-between">
+              <div>
+                <p className="text-xs uppercase tracking-[0.2em] text-white/60">Сетка</p>
+                <h2 className="text-xl md:text-2xl font-semibold">Ход турнира</h2>
+              </div>
+              <span className="text-[10px] rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-white/60">
+                Варианты
+              </span>
+            </div>
+            <div className="space-y-3">
+              {bracketOptions.map((option) => (
+                <div
+                  key={option.key}
+                  className="rounded-2xl border border-white/10 bg-black/30 p-4 space-y-3"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="text-lg font-semibold">{option.title}</h3>
+                    <span className="text-[11px] text-white/50">{option.embedUrl ? "Встроено" : "Ожидает ссылку"}</span>
+                  </div>
+                  {option.embedUrl ? (
+                    <div className="overflow-hidden rounded-xl border border-white/10 bg-black/40">
+                      <iframe
+                        src={option.embedUrl}
+                        title={`Сетка ${option.title}`}
+                        className="w-full h-[260px] md:h-[300px]"
+                        loading="lazy"
+                        allowFullScreen
+                      />
+                    </div>
+                  ) : (
+                    <p className="text-sm text-white/70">
+                      {option.note || "Добавьте ссылку на сетку, чтобы показать ход турнира."}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+
         <section className="rounded-3xl bg-white/5 border border-white/10 p-6 md:p-7 shadow-[0_20px_60px_rgba(0,0,0,0.6)] space-y-4">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <div>
@@ -527,11 +604,13 @@ export default function TournamentPage({ params }: { params: { id: string } }) {
               {teams.map((team) => (
                 <div
                   key={team.name}
-                  className="rounded-2xl border border-white/10 bg-black/25 p-4 md:p-5 space-y-3"
+                  className="rounded-2xl border border-white/10 bg-black/25 p-4 md:p-5 space-y-3 w-full"
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <h3 className="text-lg font-semibold leading-tight">{team.name}</h3>
+                  <div className="flex items-start justify-between gap-3 min-w-0">
+                    <div className="min-w-0">
+                      <h3 className="text-lg font-semibold leading-tight break-words">
+                        {team.name}
+                      </h3>
                       <p className="text-[11px] text-white/60">
                         {team.wins + team.losses === 0
                           ? "Ещё нет сыгранных матчей"
@@ -539,7 +618,7 @@ export default function TournamentPage({ params }: { params: { id: string } }) {
                       </p>
                     </div>
                     <span
-                      className={`inline-flex items-center px-3 py-1 rounded-full text-[11px] font-semibold ${team.paid ? "bg-vz_green/80 text-black" : "bg-white/10 text-white/70"}`}
+                      className={`inline-flex items-center px-3 py-1 rounded-full text-[11px] font-semibold shrink-0 ${team.paid ? "bg-vz_green/80 text-black" : "bg-white/10 text-white/70"}`}
                     >
                       {team.paid ? "Взнос оплачен" : "Без оплаты"}
                     </span>
@@ -552,10 +631,12 @@ export default function TournamentPage({ params }: { params: { id: string } }) {
                       team.roster.map((player) => (
                         <div
                           key={`${team.name}-${player.userId}`}
-                          className="flex items-center justify-between rounded-xl border border-white/5 bg-white/5 px-3 py-2"
+                          className="flex items-center justify-between rounded-xl border border-white/5 bg-white/5 px-3 py-2 min-w-0"
                         >
-                          <div className="flex flex-col">
-                            <span className="font-semibold">{player.fullName || `Игрок ${player.userId}`}</span>
+                          <div className="flex flex-col min-w-0">
+                            <span className="font-semibold break-words">
+                              {player.fullName || `Игрок ${player.userId}`}
+                            </span>
                             <span className="text-[11px] text-white/60">
                               {player.isCaptain ? "Капитан" : "Игрок"}
                             </span>

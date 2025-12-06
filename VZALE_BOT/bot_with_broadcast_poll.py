@@ -308,6 +308,20 @@ async def ensure_tables():
                 invite_code TEXT NOT NULL UNIQUE
             )
         """)
+
+        # 👤 Учётные записи для входа на сайт
+        await db.execute(
+            """
+            CREATE TABLE IF NOT EXISTS web_users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                telegram_id INTEGER NOT NULL UNIQUE,
+                username TEXT NOT NULL,
+                password_hash TEXT NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+
         # в ensure_tables, после CREATE TABLE
         await db.execute("PRAGMA foreign_keys=OFF;")
         cur = await db.execute("PRAGMA table_info(users)")
