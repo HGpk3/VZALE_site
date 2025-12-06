@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type TeamMember = {
   userId: number;
@@ -18,6 +18,11 @@ type CaptainTeam = {
   inviteCode?: string | null;
   paid?: number;
   roster: TeamMember[];
+};
+
+type Suggestion = {
+  userId: number;
+  fullName: string | null;
 };
 
 type ManagePayload = {
@@ -64,6 +69,8 @@ export function MyTeamPanel({ teams }: Props) {
   );
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [searching, setSearching] = useState(false);
 
   const activeTeam = useMemo(
     () => teams.find((t) => t.teamId === selectedTeamId) ?? teams[0],
@@ -71,6 +78,46 @@ export function MyTeamPanel({ teams }: Props) {
   );
 
   const currentRoster = roster[activeTeam?.teamId ?? -1] ?? [];
+  const duplicatePlayer = useMemo(
+    () => currentRoster.some((player) => `${player.userId}` === newPlayerId.trim()),
+    [currentRoster, newPlayerId],
+  );
+
+  useEffect(() => {
+    const query = newPlayerId.trim();
+    if (query.length < 2) {
+      setSuggestions([]);
+      setSearching(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    setSearching(true);
+    const timeout = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/team/manage?search=${encodeURIComponent(query)}`, {
+          signal: controller.signal,
+        });
+        const data = await res.json();
+        if (res.ok && data.ok && Array.isArray(data.results)) {
+          setSuggestions(data.results as Suggestion[]);
+        } else {
+          setSuggestions([]);
+        }
+      } catch (err) {
+        if (!(err instanceof DOMException && err.name === "AbortError")) {
+          setSuggestions([]);
+        }
+      } finally {
+        setSearching(false);
+      }
+    }, 200);
+
+    return () => {
+      controller.abort();
+      clearTimeout(timeout);
+    };
+  }, [newPlayerId]);
 
   async function perform(action: string, payload: Record<string, unknown>) {
     if (!activeTeam) return;
@@ -115,6 +162,10 @@ export function MyTeamPanel({ teams }: Props) {
     const id = Number(newPlayerId);
     if (!id) {
       setError("Укажите Telegram ID игрока");
+      return;
+    }
+    if (duplicatePlayer) {
+      setError("Этот игрок уже в составе");
       return;
     }
     perform("add_player", { userId: id, fullName: newPlayerName || undefined });
@@ -235,6 +286,47 @@ export function MyTeamPanel({ teams }: Props) {
                 className="rounded-xl bg-black/30 border border-white/10 px-3 py-2 text-white text-sm focus:border-vz_green focus:outline-none"
                 required
               />
+              <p className="text-[11px] text-white/60">
+                Мини-справочник ищет по ID и имени в базе игроков. Дубликаты подсвечиваются сразу.
+              </p>
+              {duplicatePlayer ? (
+                <p className="text-[11px] text-red-300">Этот игрок уже есть в составе.</p>
+              ) : null}
+              <div className="rounded-xl border border-white/10 bg-black/40 text-xs text-white/75 divide-y divide-white/5">
+                <div className="flex items-center justify-between px-3 py-2">
+                  <span className="text-[11px] uppercase tracking-[0.15em] text-white/50">Подсказки</span>
+                  <span className="text-[11px] text-white/40">{searching ? "Ищем..." : "Поиск"}</span>
+                </div>
+                <div className="max-h-36 overflow-y-auto">
+                  {suggestions.length === 0 ? (
+                    <p className="px-3 py-2 text-white/40 text-[12px]">Ничего не найдено</p>
+                  ) : (
+                    suggestions.map((s) => (
+                      <button
+                        type="button"
+                        key={s.userId}
+                        onClick={() => {
+                          setNewPlayerId(String(s.userId));
+                          if (!newPlayerName && s.fullName) {
+                            setNewPlayerName(s.fullName);
+                          }
+                        }}
+                        className="w-full text-left px-3 py-2 hover:bg-white/10 transition flex items-center justify-between gap-3"
+                      >
+                        <div className="flex flex-col min-w-0">
+                          <span className="font-semibold text-white truncate">
+                            {s.fullName || `Игрок ${s.userId}`}
+                          </span>
+                          <span className="text-[11px] text-white/50">ID: {s.userId}</span>
+                        </div>
+                        <span className="text-[10px] rounded-full border border-white/10 px-2 py-0.5 text-white/60">
+                          Выбрать
+                        </span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </div>
             </label>
             <label className="flex flex-col gap-2 text-sm">
               <span className="text-white/70">Имя (необязательно)</span>

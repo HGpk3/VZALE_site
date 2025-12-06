@@ -29,6 +29,22 @@ function getTeamForCaptain(teamId: number, captainId: number) {
   return row;
 }
 
+function searchUsers(query: string, limit = 8) {
+  const db = getDb();
+  const like = `%${query}%`;
+  return db
+    .prepare(
+      `
+        SELECT user_id AS userId, full_name AS fullName
+        FROM users
+        WHERE CAST(user_id AS TEXT) LIKE ? OR full_name LIKE ?
+        ORDER BY full_name IS NULL, full_name ASC
+        LIMIT ?
+      `,
+    )
+    .all(like, like, limit) as { userId: number; fullName: string | null }[];
+}
+
 function fetchTeamPayload(teamId: number) {
   const db = getDb();
   const team = db
@@ -158,6 +174,17 @@ export async function POST(req: NextRequest) {
         );
       }
 
+      const duplicate = db
+        .prepare("SELECT 1 FROM team_members WHERE team_id = ? AND user_id = ?")
+        .get(teamId, userId) as { 1: number } | undefined;
+
+      if (duplicate) {
+        return NextResponse.json(
+          { ok: false, error: "Этот игрок уже в составе" },
+          { status: 400 },
+        );
+      }
+
       db.prepare("INSERT OR IGNORE INTO users (user_id, full_name) VALUES (?, ?)").run(
         userId,
         fullName,
@@ -222,4 +249,25 @@ export async function POST(req: NextRequest) {
     console.error("[team-manage]", err);
     return NextResponse.json({ ok: false, error: "Ошибка при обновлении команды" }, { status: 500 });
   }
+}
+
+export async function GET(req: NextRequest) {
+  const search = req.nextUrl.searchParams.get("search");
+  if (!search || search.trim().length < 2) {
+    return NextResponse.json(
+      { ok: false, error: "Введите минимум 2 символа" },
+      { status: 400 },
+    );
+  }
+
+  const telegramId = ensureAuth(req);
+  if (!telegramId) {
+    return NextResponse.json(
+      { ok: false, error: "Требуется авторизация через бота" },
+      { status: 401 },
+    );
+  }
+
+  const results = searchUsers(search.trim());
+  return NextResponse.json({ ok: true, results });
 }

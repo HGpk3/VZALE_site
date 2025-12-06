@@ -24,6 +24,15 @@ type TournamentRow = {
   settingsJson: string | null;
 };
 
+type TournamentSettings = {
+  description?: string;
+  format?: string;
+  prizes?: string;
+  mapEmbed?: string;
+  mapQuery?: string;
+  brackets?: { key: string; title: string; embedUrl?: string; note?: string }[];
+};
+
 type MatchRow = {
   id: number;
   stage: string | null;
@@ -124,14 +133,10 @@ function fetchTournamentList(): Pick<TournamentRow, "id" | "name">[] {
     .all() as Pick<TournamentRow, "id" | "name">[];
 }
 
-function parseSettings(settingsJson: string | null) {
+function parseSettings(settingsJson: string | null): TournamentSettings | null {
   if (!settingsJson) return null;
   try {
-    return JSON.parse(settingsJson) as {
-      description?: string;
-      format?: string;
-      prizes?: string;
-    };
+    return JSON.parse(settingsJson) as TournamentSettings;
   } catch (err) {
     console.error("[tournament] failed to parse settings_json", err);
     return null;
@@ -313,6 +318,16 @@ function getPlayerStatsMap(tournamentId: number) {
   return map;
 }
 
+function mapEmbedUrl(settings: TournamentSettings | null, venue: string | null) {
+  const direct = settings?.mapEmbed?.trim();
+  if (direct) return direct;
+
+  const query = settings?.mapQuery?.trim() || venue?.trim();
+  if (!query) return null;
+
+  return `https://yandex.ru/map-widget/v1/?text=${encodeURIComponent(query)}&z=15&l=map`;
+}
+
 export default function TournamentPage({ params }: { params: { id: string } }) {
   const allTournaments = fetchTournamentList();
   const paramId = Number.parseInt(params.id, 10);
@@ -361,6 +376,22 @@ export default function TournamentPage({ params }: { params: { id: string } }) {
   const settings = row ? parseSettings(row.settingsJson) : null;
   const canRegister = status === "registration_open";
   const playerStatsMap = getPlayerStatsMap(selectedId);
+  const mapUrl = mapEmbedUrl(settings, row?.venue ?? null);
+  const bracketOptions =
+    settings?.brackets && settings.brackets.length > 0
+      ? settings.brackets
+      : [
+          {
+            key: "groups_playoff",
+            title: "Группы + плей-офф",
+            note: "Добавьте ссылку на сетку, чтобы участники видели посев и плей-офф.",
+          },
+          {
+            key: "double_elim",
+            title: "Верхняя и нижняя сетка",
+            note: "Поддерживается двойное выбывание — загрузите embed ссылки в настройках турнира.",
+          },
+        ];
 
   function matchStatusBadge(value: string | null) {
     switch (value) {
@@ -479,6 +510,76 @@ export default function TournamentPage({ params }: { params: { id: string } }) {
               <p>После подачи заявку можно отследить и обновить в личном кабинете или в Telegram.</p>
             </div>
           </aside>
+        </section>
+
+        <section className="grid gap-6 md:grid-cols-2 items-start">
+          <div className="rounded-3xl bg-white/5 border border-white/10 p-6 md:p-7 shadow-[0_20px_60px_rgba(0,0,0,0.6)] space-y-4">
+            <div className="flex items-center gap-2">
+              <span className="text-xs uppercase tracking-[0.2em] text-white/60">Локация</span>
+              <span className="text-[10px] rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-white/60">
+                Яндекс.Карты
+              </span>
+            </div>
+            <h2 className="text-xl md:text-2xl font-semibold">Где проходит турнир</h2>
+            <p className="text-sm md:text-base text-white/75">
+              {row?.venue || settings?.mapQuery || "Организатор укажет площадку позже."}
+            </p>
+            {mapUrl ? (
+              <div className="overflow-hidden rounded-2xl border border-white/10 bg-black/40">
+                <iframe
+                  src={mapUrl}
+                  title="Карта площадки"
+                  className="w-full h-[280px] md:h-[320px]"
+                  allowFullScreen
+                  loading="lazy"
+                />
+              </div>
+            ) : (
+              <div className="rounded-xl border border-dashed border-white/15 bg-black/30 p-4 text-sm text-white/60">
+                Добавьте адрес или embed ссылку на Яндекс.Карты в настройках турнира, чтобы показать точку на карте.
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-3xl bg-white/5 border border-white/10 p-6 md:p-7 shadow-[0_20px_60px_rgba(0,0,0,0.6)] space-y-4">
+            <div className="flex items-center gap-2 justify-between">
+              <div>
+                <p className="text-xs uppercase tracking-[0.2em] text-white/60">Сетка</p>
+                <h2 className="text-xl md:text-2xl font-semibold">Ход турнира</h2>
+              </div>
+              <span className="text-[10px] rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-white/60">
+                Варианты
+              </span>
+            </div>
+            <div className="space-y-3">
+              {bracketOptions.map((option) => (
+                <div
+                  key={option.key}
+                  className="rounded-2xl border border-white/10 bg-black/30 p-4 space-y-3"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="text-lg font-semibold">{option.title}</h3>
+                    <span className="text-[11px] text-white/50">{option.embedUrl ? "Встроено" : "Ожидает ссылку"}</span>
+                  </div>
+                  {option.embedUrl ? (
+                    <div className="overflow-hidden rounded-xl border border-white/10 bg-black/40">
+                      <iframe
+                        src={option.embedUrl}
+                        title={`Сетка ${option.title}`}
+                        className="w-full h-[260px] md:h-[300px]"
+                        loading="lazy"
+                        allowFullScreen
+                      />
+                    </div>
+                  ) : (
+                    <p className="text-sm text-white/70">
+                      {option.note || "Добавьте ссылку на сетку, чтобы показать ход турнира."}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
         </section>
 
         <section className="rounded-3xl bg-white/5 border border-white/10 p-6 md:p-7 shadow-[0_20px_60px_rgba(0,0,0,0.6)] space-y-4">
