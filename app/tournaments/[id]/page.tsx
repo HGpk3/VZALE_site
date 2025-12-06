@@ -217,7 +217,7 @@ function getTeams(tournamentId: number): TeamWithRoster[] {
         JOIN teams_new tn ON tn.id = tm.team_id
         LEFT JOIN users u ON u.user_id = tm.user_id
         WHERE tn.tournament_id = ?
-        ORDER BY is_captain DESC, COALESCE(u.full_name, '') ASC, tm.user_id ASC
+        ORDER BY isCaptain DESC, COALESCE(u.full_name, '') ASC, tm.user_id ASC
       `,
     )
     .all(tournamentId) as RosterRow[];

@@ -15,6 +15,7 @@ function getTeamForCaptain(teamId: number, captainId: number) {
           tn.id,
           tn.name,
           tn.tournament_id AS tournamentId,
+          tn.captain_user_id AS captainUserId,
           tm.role
         FROM teams_new tn
         LEFT JOIN team_members tm ON tm.team_id = tn.id AND tm.user_id = ?
@@ -22,11 +23,17 @@ function getTeamForCaptain(teamId: number, captainId: number) {
       `,
     )
     .get(captainId, teamId) as
-    | { id: number; name: string; tournamentId: number | null; role: string | null }
+    | {
+        id: number;
+        name: string;
+        tournamentId: number | null;
+        captainUserId: number | null;
+        role: string | null;
+      }
     | undefined;
 
-  if (!row || row.role !== "captain") return null;
-  return row;
+  if (!row || (row.captainUserId !== captainId && row.role !== "captain")) return null;
+  return { id: row.id, name: row.name, tournamentId: row.tournamentId };
 }
 
 function searchUsers(query: string, limit = 8) {
