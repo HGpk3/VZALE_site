@@ -43,7 +43,7 @@ export default async function Home({
   ];
 
   return (
-    <main className="flex h-screen min-h-screen flex-col overflow-hidden bg-vz-gradient">
+    <main className="flex min-h-screen flex-col bg-vz-gradient">
       <LayeredScrollLayout sections={sections} />
     </main>
   );
