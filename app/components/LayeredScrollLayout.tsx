@@ -18,7 +18,7 @@ export default function LayeredScrollLayout({ sections }: LayeredScrollLayoutPro
   const activeIndex = sections.findIndex((section) => section.id === activeId);
 
   return (
-    <div className="relative min-h-screen overflow-y-auto bg-vz-gradient text-white snap-y snap-mandatory">
+    <div className="relative h-full min-h-screen max-h-screen overflow-y-auto overflow-x-hidden bg-vz-gradient text-white snap-y snap-mandatory">
       {sections.map((section, index) => {
         const isActive = section.id === activeId || (activeId === null && index === 0);
         const isBehindActive = activeIndex > index;

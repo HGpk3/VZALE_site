@@ -41,7 +41,7 @@ export default function Home({
   ];
 
   return (
-    <main className="flex flex-col min-h-screen bg-vz-gradient">
+    <main className="flex h-screen min-h-screen flex-col overflow-hidden bg-vz-gradient">
       <LayeredScrollLayout sections={sections} />
     </main>
   );
