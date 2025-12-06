@@ -38,8 +38,10 @@ type MatchRow = {
 };
 
 type TeamRow = {
+  id: number;
   name: string;
   paid: number;
+  tournamentId: number;
 };
 
 type RosterRow = {
@@ -167,74 +169,50 @@ function getTeams(tournamentId: number): TeamWithRoster[] {
   let teams = db
     .prepare(
       `
-        SELECT name, paid
-        FROM tournament_team_names
-        WHERE tournament_id = ?
-        ORDER BY paid DESC, name ASC
+        SELECT
+          tn.id,
+          tn.name,
+          tn.tournament_id AS tournamentId,
+          COALESCE(ttn.paid, 0) AS paid
+        FROM teams_new tn
+        LEFT JOIN tournament_team_names ttn
+          ON ttn.tournament_id = tn.tournament_id AND ttn.name = tn.name
+        WHERE tn.tournament_id = ?
+        ORDER BY COALESCE(ttn.paid, 0) DESC, tn.name ASC
       `,
     )
     .all(tournamentId) as TeamRow[];
 
-  // Для старых турниров, где таблица имен команд могла не заполняться, собираем названия
-  // из заявок и матчей, чтобы страница не была пустой.
   if (teams.length === 0) {
-    const rosterTeams = db
+    teams = db
       .prepare(
         `
-          SELECT DISTINCT team_name AS name, 0 AS paid
-          FROM tournament_roster
-          WHERE tournament_id = ?
-          ORDER BY name ASC
+          SELECT
+            COALESCE(ttn.rowid, 0) AS id,
+            ttn.name,
+            ttn.tournament_id AS tournamentId,
+            ttn.paid
+          FROM tournament_team_names ttn
+          WHERE ttn.tournament_id = ?
+          ORDER BY ttn.paid DESC, ttn.name ASC
         `,
       )
       .all(tournamentId) as TeamRow[];
-
-    const matchTeams = db
-      .prepare(
-        `
-          SELECT DISTINCT team_home_name AS name, 0 AS paid
-          FROM matches_simple
-          WHERE tournament_id = ?
-          UNION
-          SELECT DISTINCT team_away_name AS name, 0 AS paid
-          FROM matches_simple
-          WHERE tournament_id = ?
-        `,
-      )
-      .all(tournamentId, tournamentId) as TeamRow[];
-
-    const merged = new Map<string, TeamRow>();
-    [...rosterTeams, ...matchTeams].forEach((team) => {
-      if (team.name) merged.set(team.name, team);
-    });
-    teams = Array.from(merged.values()).sort((a, b) => a.name.localeCompare(b.name));
-
-    // Если и так не нашли, показываем общий список команд из таблицы teams,
-    // как это делает бот.
-    if (teams.length === 0) {
-      teams = db
-        .prepare(
-          `
-            SELECT DISTINCT team_name AS name, 0 AS paid
-            FROM teams
-            ORDER BY team_name ASC
-          `,
-        )
-        .all() as TeamRow[];
-    }
   }
 
   let rosterRows = db
     .prepare(
       `
         SELECT
-          team_name AS teamName,
-          user_id AS userId,
-          full_name AS fullName,
-          is_captain AS isCaptain
-        FROM tournament_roster
-        WHERE tournament_id = ?
-        ORDER BY is_captain DESC, full_name ASC
+          tn.name AS teamName,
+          tm.user_id AS userId,
+          u.full_name AS fullName,
+          CASE WHEN tm.role = 'captain' THEN 1 ELSE 0 END AS isCaptain
+        FROM team_members tm
+        JOIN teams_new tn ON tn.id = tm.team_id
+        LEFT JOIN users u ON u.user_id = tm.user_id
+        WHERE tn.tournament_id = ?
+        ORDER BY is_captain DESC, COALESCE(u.full_name, '') ASC, tm.user_id ASC
       `,
     )
     .all(tournamentId) as RosterRow[];
@@ -249,14 +227,12 @@ function getTeams(tournamentId: number): TeamWithRoster[] {
             member_id AS userId,
             member_name AS fullName,
             0 AS isCaptain
-          FROM teams
-          WHERE team_name IN (
-            SELECT DISTINCT team_name FROM teams
-          )
+          FROM tournament_roster
+          WHERE tournament_id = ?
           ORDER BY team_name ASC, member_name ASC
         `,
       )
-      .all() as RosterRow[];
+      .all(tournamentId) as RosterRow[];
   }
 
   const rosterMap = new Map<string, RosterRow[]>();
@@ -527,11 +503,13 @@ export default function TournamentPage({ params }: { params: { id: string } }) {
               {teams.map((team) => (
                 <div
                   key={team.name}
-                  className="rounded-2xl border border-white/10 bg-black/25 p-4 md:p-5 space-y-3"
+                  className="rounded-2xl border border-white/10 bg-black/25 p-4 md:p-5 space-y-3 w-full"
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <h3 className="text-lg font-semibold leading-tight">{team.name}</h3>
+                  <div className="flex items-start justify-between gap-3 min-w-0">
+                    <div className="min-w-0">
+                      <h3 className="text-lg font-semibold leading-tight break-words">
+                        {team.name}
+                      </h3>
                       <p className="text-[11px] text-white/60">
                         {team.wins + team.losses === 0
                           ? "Ещё нет сыгранных матчей"
@@ -539,7 +517,7 @@ export default function TournamentPage({ params }: { params: { id: string } }) {
                       </p>
                     </div>
                     <span
-                      className={`inline-flex items-center px-3 py-1 rounded-full text-[11px] font-semibold ${team.paid ? "bg-vz_green/80 text-black" : "bg-white/10 text-white/70"}`}
+                      className={`inline-flex items-center px-3 py-1 rounded-full text-[11px] font-semibold shrink-0 ${team.paid ? "bg-vz_green/80 text-black" : "bg-white/10 text-white/70"}`}
                     >
                       {team.paid ? "Взнос оплачен" : "Без оплаты"}
                     </span>
@@ -552,10 +530,12 @@ export default function TournamentPage({ params }: { params: { id: string } }) {
                       team.roster.map((player) => (
                         <div
                           key={`${team.name}-${player.userId}`}
-                          className="flex items-center justify-between rounded-xl border border-white/5 bg-white/5 px-3 py-2"
+                          className="flex items-center justify-between rounded-xl border border-white/5 bg-white/5 px-3 py-2 min-w-0"
                         >
-                          <div className="flex flex-col">
-                            <span className="font-semibold">{player.fullName || `Игрок ${player.userId}`}</span>
+                          <div className="flex flex-col min-w-0">
+                            <span className="font-semibold break-words">
+                              {player.fullName || `Игрок ${player.userId}`}
+                            </span>
                             <span className="text-[11px] text-white/60">
                               {player.isCaptain ? "Капитан" : "Игрок"}
                             </span>

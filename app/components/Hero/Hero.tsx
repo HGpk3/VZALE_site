@@ -25,18 +25,18 @@ export default function Hero() {
       {/* Кнопки */}
       <div className="flex flex-col sm:flex-row gap-3 sm:gap-6 mt-10 relative z-10 w-full sm:w-auto max-w-xl">
         <Link href="/participate">
-          <button className="w-full sm:w-auto rounded-full bg-gradient-to-r from-vz_purple to-vz_green px-10 py-3 text-base sm:text-lg font-semibold text-black shadow-[0_16px_50px_rgba(0,0,0,0.3)] transition hover:scale-[1.02] hover:shadow-[0_18px_55px_rgba(0,0,0,0.34)]">
+          <button className="w-full sm:w-auto rounded-xl bg-gradient-to-r from-vz_purple to-vz_green px-10 py-3 text-base sm:text-lg font-semibold text-black shadow-[0_16px_50px_rgba(0,0,0,0.3)] transition hover:scale-[1.02] hover:shadow-[0_18px_55px_rgba(0,0,0,0.34)]">
             Принять участие
           </button>
         </Link>
 
         <Link href="/tournaments">
-          <button className="w-full sm:w-auto rounded-full border border-white/70 bg-white/10 px-10 py-3 text-base sm:text-lg font-semibold text-white backdrop-blur transition hover:border-vz_green hover:text-vz_green">
+          <button className="w-full sm:w-auto rounded-xl border border-white/70 bg-white/10 px-10 py-3 text-base sm:text-lg font-semibold text-white backdrop-blur transition hover:border-vz_green hover:text-vz_green">
             Список турниров
           </button>
         </Link>
         <Link href="/me">
-          <button className="w-full sm:w-auto rounded-full bg-white px-10 py-3 text-base sm:text-lg font-semibold text-vz_purple shadow-[0_12px_35px_rgba(0,0,0,0.25)] transition hover:-translate-y-0.5 hover:bg-vz_green hover:text-black">
+          <button className="w-full sm:w-auto rounded-xl bg-white px-10 py-3 text-base sm:text-lg font-semibold text-vz_purple shadow-[0_12px_35px_rgba(0,0,0,0.25)] transition hover:-translate-y-0.5 hover:bg-vz_green hover:text-black">
             Личный кабинет
           </button>
         </Link>

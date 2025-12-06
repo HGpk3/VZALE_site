@@ -9,6 +9,7 @@ import {
   TournamentRow as TournamentDbRow,
 } from "@/lib/tournaments";
 import { TournamentSignup, TournamentOption } from "./components/TournamentSignup";
+import { MyTeamPanel } from "./components/MyTeamPanel";
 
 type TeamMembership = {
   teamId: number;
@@ -104,6 +105,15 @@ type RecentMatchRow = {
   rebounds: number;
   threes: number;
   result: "win" | "loss" | "pending";
+};
+
+type CaptainRosterRow = {
+  teamId: number;
+  userId: number;
+  fullName: string | null;
+  isCaptain: number;
+  role: string | null;
+  status: string | null;
 };
 
 type ProfileData = {
@@ -237,6 +247,58 @@ function achievementProgress(code: string, stats: StatsSummary) {
   };
 
   return helpers[key];
+}
+
+function getRostersForTeams(teamIds: number[]): Map<number, CaptainRosterRow[]> {
+  if (teamIds.length === 0) return new Map();
+  const db = getDb();
+  const placeholders = teamIds.map(() => "?").join(",");
+  const rows = db
+    .prepare(
+      `
+        SELECT
+          tm.team_id AS teamId,
+          tm.user_id AS userId,
+          u.full_name AS fullName,
+          tm.role,
+          tm.status,
+          CASE WHEN tm.role = 'captain' THEN 1 ELSE 0 END AS isCaptain
+        FROM team_members tm
+        LEFT JOIN users u ON u.user_id = tm.user_id
+        WHERE tm.team_id IN (${placeholders})
+        ORDER BY tm.team_id, isCaptain DESC, COALESCE(u.full_name, '') ASC, tm.user_id ASC
+      `,
+    )
+    .all(...teamIds) as CaptainRosterRow[];
+
+  const map = new Map<number, CaptainRosterRow[]>();
+  rows.forEach((row) => {
+    const bucket = map.get(row.teamId) || [];
+    bucket.push(row);
+    map.set(row.teamId, bucket);
+  });
+  return map;
+}
+
+function getPaidMapForTeams(teamIds: number[]): Map<number, number> {
+  if (teamIds.length === 0) return new Map();
+  const db = getDb();
+  const placeholders = teamIds.map(() => "?").join(",");
+  const rows = db
+    .prepare(
+      `
+        SELECT tn.id AS teamId, COALESCE(ttn.paid, 0) AS paid
+        FROM teams_new tn
+        LEFT JOIN tournament_team_names ttn
+          ON ttn.tournament_id = tn.tournament_id AND ttn.name = tn.name
+        WHERE tn.id IN (${placeholders})
+      `,
+    )
+    .all(...teamIds) as { teamId: number; paid: number }[];
+
+  const map = new Map<number, number>();
+  rows.forEach((row) => map.set(row.teamId, row.paid));
+  return map;
 }
 
 function sparkline(values: number[]) {
@@ -606,6 +668,19 @@ export default async function MePage() {
   const adminMode = isAdmin(telegramId);
   const previousTeam = fetchLastTeamForCaptain(telegramId);
 
+  const captainTeams = profile.memberships.filter(
+    (m) => m.role === "captain"
+  );
+  const captainTeamIds = captainTeams.map((t) => t.teamId);
+  const rosterMap = getRostersForTeams(captainTeamIds);
+  const paidMap = getPaidMapForTeams(captainTeamIds);
+  const captainTeamsWithRoster = captainTeams.map((team) => ({
+    ...team,
+    name: team.teamName,
+    paid: paidMap.get(team.teamId) ?? 0,
+    roster: rosterMap.get(team.teamId) ?? [],
+  }));
+
   const tournamentsFromTeams = profile.memberships
     .map((m) => m.tournamentId)
     .filter(Boolean) as number[];
@@ -635,7 +710,10 @@ export default async function MePage() {
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-[#0b0615] via-[#05030a] to-black text-white px-4 py-12 md:py-16">
-      <div className="relative max-w-6xl mx-auto space-y-10">
+      <div
+        className="relative max-w-6xl mx-auto space-y-10"
+        id="overview"
+      >
         <div className="pointer-events-none absolute inset-0 opacity-50">
           <div className="absolute -top-20 left-10 w-[260px] h-[220px] bg-vz_purple blur-[120px]" />
           <div className="absolute bottom-0 right-0 w-[320px] h-[240px] bg-vz_green blur-[140px]" />
@@ -667,6 +745,23 @@ export default async function MePage() {
           )}
         </div>
 
+        <div className="relative z-10 flex flex-wrap gap-2 text-xs text-white/70" role="tablist">
+          <a
+            href="#overview"
+            className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 hover:border-vz_green hover:text-vz_green transition"
+          >
+            Обзор
+          </a>
+          {captainTeamsWithRoster.length > 0 ? (
+            <a
+              href="#my-team"
+              className="rounded-full border border-vz_green/40 bg-vz_green/15 px-3 py-1.5 text-vz_green hover:brightness-110 transition"
+            >
+              Моя команда
+            </a>
+          ) : null}
+        </div>
+
         <header className="relative z-10 space-y-4">
           <p className="text-xs uppercase tracking-[0.22em] text-white/60">
             Личный кабинет VZALE
@@ -694,6 +789,34 @@ export default async function MePage() {
             </a>
           </div>
         </header>
+
+        {captainTeamsWithRoster.length > 0 ? (
+          <section
+            id="my-team"
+            className="relative z-10 rounded-2xl border border-white/10 bg-white/5 p-5 md:p-6 shadow-lg space-y-4"
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="space-y-1">
+                <p className="text-xs uppercase tracking-[0.2em] text-white/60">
+                  Капитанская
+                </p>
+                <h2 className="text-2xl font-semibold">Моя команда</h2>
+                <p className="text-sm text-white/70 max-w-2xl">
+                  Управляйте составом прямо с сайта: переименовывайте, добавляйте и удаляйте игроков.
+                  Ссылка на оплату появится здесь, как только её добавим.
+                </p>
+              </div>
+              <a
+                href="#overview"
+                className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-xs font-semibold text-white hover:border-vz_green hover:text-vz_green transition"
+              >
+                ← К карточкам
+              </a>
+            </div>
+
+            <MyTeamPanel teams={captainTeamsWithRoster} />
+          </section>
+        ) : null}
 
         <section className="relative z-10 grid gap-4 md:grid-cols-4">
           <div className="rounded-2xl border border-white/10 bg-white/5 p-5 shadow-xl">
