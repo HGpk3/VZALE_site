@@ -23,7 +23,7 @@ const features = [
 
 export default function Features() {
   return (
-    <section className="relative w-full py-20 md:py-24 px-6 md:px-10 bg-white/80 backdrop-blur-xl">
+    <section className="relative w-full py-20 md:py-24 px-6 md:px-10 bg-white/80 backdrop-blur-xl appear-block">
       <div className="max-w-6xl mx-auto space-y-10">
         {/* Заголовок */}
         <div className="text-center space-y-3">

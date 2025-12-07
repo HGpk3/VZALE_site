@@ -38,11 +38,14 @@ type MatchRow = {
 };
 
 type TeamRow = {
+  id: number;
   name: string;
   paid: number;
+  registeredAt?: string | null;
 };
 
 type RosterRow = {
+  teamId: number;
   teamName: string;
   userId: number;
   fullName: string | null;
@@ -167,21 +170,55 @@ function getTeams(tournamentId: number): TeamWithRoster[] {
   let teams = db
     .prepare(
       `
-        SELECT name, paid
-        FROM tournament_team_names
-        WHERE tournament_id = ?
-        ORDER BY paid DESC, name ASC
+        SELECT t.id, t.name, 0 AS paid, tt.registered_at AS registeredAt
+        FROM tournament_teams tt
+        JOIN teams t ON t.id = tt.team_id
+        WHERE tt.tournament_id = ?
+        ORDER BY t.name ASC
       `,
     )
     .all(tournamentId) as TeamRow[];
 
-  // Для старых турниров, где таблица имен команд могла не заполняться, собираем названия
-  // из заявок и матчей, чтобы страница не была пустой.
+  let rosterRows: RosterRow[] = [];
+
+  if (teams.length > 0) {
+    const placeholders = teams.map(() => "?").join(",");
+    rosterRows = db
+      .prepare(
+        `
+          SELECT
+            tm.team_id AS teamId,
+            t.name AS teamName,
+            tm.user_id AS userId,
+            u.full_name AS fullName,
+            CASE WHEN tm.role = 'captain' THEN 1 ELSE 0 END AS isCaptain
+          FROM team_members tm
+          JOIN teams t ON t.id = tm.team_id
+          LEFT JOIN users u ON u.user_id = tm.user_id
+          WHERE tm.team_id IN (${placeholders})
+          ORDER BY isCaptain DESC, fullName ASC
+        `,
+      )
+      .all(...teams.map((t) => t.id)) as RosterRow[];
+  }
+
+  // Фоллбэк для старых турниров, если нет записей в связке tournament_teams
   if (teams.length === 0) {
+    const legacyTeams = db
+      .prepare(
+        `
+          SELECT name, paid, id as teamId, registered_at as registeredAt
+          FROM tournament_team_names
+          WHERE tournament_id = ?
+          ORDER BY paid DESC, name ASC
+        `,
+      )
+      .all(tournamentId) as (TeamRow & { teamId?: number })[];
+
     const rosterTeams = db
       .prepare(
         `
-          SELECT DISTINCT team_name AS name, 0 AS paid
+          SELECT DISTINCT team_name AS name, 0 AS paid, NULL as registeredAt
           FROM tournament_roster
           WHERE tournament_id = ?
           ORDER BY name ASC
@@ -192,11 +229,11 @@ function getTeams(tournamentId: number): TeamWithRoster[] {
     const matchTeams = db
       .prepare(
         `
-          SELECT DISTINCT team_home_name AS name, 0 AS paid
+          SELECT DISTINCT team_home_name AS name, 0 AS paid, NULL as registeredAt
           FROM matches_simple
           WHERE tournament_id = ?
           UNION
-          SELECT DISTINCT team_away_name AS name, 0 AS paid
+          SELECT DISTINCT team_away_name AS name, 0 AS paid, NULL as registeredAt
           FROM matches_simple
           WHERE tournament_id = ?
         `,
@@ -204,66 +241,59 @@ function getTeams(tournamentId: number): TeamWithRoster[] {
       .all(tournamentId, tournamentId) as TeamRow[];
 
     const merged = new Map<string, TeamRow>();
-    [...rosterTeams, ...matchTeams].forEach((team) => {
+    [...legacyTeams, ...rosterTeams, ...matchTeams].forEach((team) => {
       if (team.name) merged.set(team.name, team);
     });
-    teams = Array.from(merged.values()).sort((a, b) => a.name.localeCompare(b.name));
+    const fallbackTeams = Array.from(merged.values()).sort((a, b) =>
+      a.name.localeCompare(b.name)
+    );
 
-    // Если и так не нашли, показываем общий список команд из таблицы teams,
-    // как это делает бот.
-    if (teams.length === 0) {
-      teams = db
-        .prepare(
-          `
-            SELECT DISTINCT team_name AS name, 0 AS paid
-            FROM teams
-            ORDER BY team_name ASC
-          `,
-        )
-        .all() as TeamRow[];
-    }
-  }
+    teams.push(...fallbackTeams.map((t, idx) => ({ ...t, id: t.id ?? idx + 1 })));
 
-  let rosterRows = db
-    .prepare(
-      `
-        SELECT
-          team_name AS teamName,
-          user_id AS userId,
-          full_name AS fullName,
-          is_captain AS isCaptain
-        FROM tournament_roster
-        WHERE tournament_id = ?
-        ORDER BY is_captain DESC, full_name ASC
-      `,
-    )
-    .all(tournamentId) as RosterRow[];
-
-  // Для старых записей подтягиваем составы из той же таблицы teams, что использует бот.
-  if (rosterRows.length === 0 && teams.length > 0) {
     rosterRows = db
       .prepare(
         `
           SELECT
+            0 as teamId,
             team_name AS teamName,
-            member_id AS userId,
-            member_name AS fullName,
-            0 AS isCaptain
-          FROM teams
-          WHERE team_name IN (
-            SELECT DISTINCT team_name FROM teams
-          )
-          ORDER BY team_name ASC, member_name ASC
+            user_id AS userId,
+            full_name AS fullName,
+            is_captain AS isCaptain
+          FROM tournament_roster
+          WHERE tournament_id = ?
+          ORDER BY is_captain DESC, full_name ASC
         `,
       )
-      .all() as RosterRow[];
+      .all(tournamentId) as RosterRow[];
+
+    if (rosterRows.length === 0 && teams.length > 0) {
+      rosterRows = db
+        .prepare(
+          `
+            SELECT
+              0 as teamId,
+              team_name AS teamName,
+              member_id AS userId,
+              member_name AS fullName,
+              0 AS isCaptain
+            FROM teams
+            WHERE team_name IN (
+              SELECT DISTINCT team_name FROM teams
+            )
+            ORDER BY team_name ASC, member_name ASC
+          `,
+        )
+        .all() as RosterRow[];
+    }
   }
 
-  const rosterMap = new Map<string, RosterRow[]>();
+  const rosterMap = new Map<number, RosterRow[]>();
   for (const row of rosterRows) {
-    const bucket = rosterMap.get(row.teamName) || [];
+    const key = row.teamId || teams.find((t) => t.name === row.teamName)?.id;
+    if (!key) continue;
+    const bucket = rosterMap.get(key) || [];
     bucket.push(row);
-    rosterMap.set(row.teamName, bucket);
+    rosterMap.set(key, bucket);
   }
 
   // Собираем статистику побед/поражений из matches_simple, опираясь на названия команд
@@ -300,7 +330,7 @@ function getTeams(tournamentId: number): TeamWithRoster[] {
     ...team,
     wins: record.get(team.name)?.wins ?? 0,
     losses: record.get(team.name)?.losses ?? 0,
-    roster: rosterMap.get(team.name) ?? [],
+    roster: rosterMap.get(team.id) ?? [],
   }));
 }
 
@@ -523,11 +553,11 @@ export default function TournamentPage({ params }: { params: { id: string } }) {
               Как только капитаны подадут заявки, здесь появится таблица команд и их составов.
             </div>
           ) : (
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="grid gap-3 sm:grid-cols-2 auto-rows-fr">
               {teams.map((team) => (
                 <div
-                  key={team.name}
-                  className="rounded-2xl border border-white/10 bg-black/25 p-4 md:p-5 space-y-3"
+                  key={team.id}
+                  className="w-full max-w-full rounded-2xl border border-white/10 bg-black/25 p-4 md:p-5 space-y-3 overflow-hidden"
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>

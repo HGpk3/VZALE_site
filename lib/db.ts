@@ -55,6 +55,21 @@ function initDatabase() {
       password_hash TEXT NOT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     );
+
+    CREATE TABLE IF NOT EXISTS teams (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      captain_user_id INTEGER NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS tournament_teams (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tournament_id INTEGER NOT NULL,
+      team_id INTEGER NOT NULL,
+      registered_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(tournament_id, team_id)
+    );
   `);
 
   return instance;
