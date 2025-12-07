@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { getDb } from "@/lib/db";
 import TournamentSelector from "./TournamentSelector";
+import { PaymentModal } from "@/components/PaymentModal";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -167,6 +168,22 @@ function getMatches(tournamentId: number): MatchRow[] {
 function getTeams(tournamentId: number): TeamWithRoster[] {
   const db = getDb();
 
+  const paymentMap = new Map<string, number>();
+
+  const paidRows = db
+    .prepare(
+      `
+        SELECT name, paid
+        FROM tournament_team_names
+        WHERE tournament_id = ?
+      `,
+    )
+    .all(tournamentId) as { name: string; paid: number }[];
+
+  paidRows.forEach((row) => {
+    paymentMap.set(row.name, row.paid ?? 0);
+  });
+
   let teams = db
     .prepare(
       `
@@ -178,6 +195,11 @@ function getTeams(tournamentId: number): TeamWithRoster[] {
       `,
     )
     .all(tournamentId) as TeamRow[];
+
+  teams = teams.map((team) => ({
+    ...team,
+    paid: paymentMap.get(team.name) ?? team.paid ?? 0,
+  }));
 
   let rosterRows: RosterRow[] = [];
 
@@ -244,9 +266,12 @@ function getTeams(tournamentId: number): TeamWithRoster[] {
     [...legacyTeams, ...rosterTeams, ...matchTeams].forEach((team) => {
       if (team.name) merged.set(team.name, team);
     });
-    const fallbackTeams = Array.from(merged.values()).sort((a, b) =>
-      a.name.localeCompare(b.name)
-    );
+    const fallbackTeams = Array.from(merged.values())
+      .map((team) => ({
+        ...team,
+        paid: paymentMap.get(team.name) ?? team.paid ?? 0,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
 
     teams.push(...fallbackTeams.map((t, idx) => ({ ...t, id: t.id ?? idx + 1 })));
 
@@ -595,6 +620,16 @@ export default function TournamentPage({ params }: { params: { id: string } }) {
                       ))
                     )}
                   </div>
+
+                  {!team.paid && (
+                    <div className="pt-2">
+                      <PaymentModal
+                        triggerText="Оплатить взнос"
+                        variant="ghost"
+                        className="w-full justify-center"
+                      />
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

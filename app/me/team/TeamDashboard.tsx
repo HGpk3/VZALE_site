@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
+
+import { PaymentModal } from "@/components/PaymentModal";
 
 type Member = { userId: number; role: string | null; status: string | null; fullName: string | null };
 type Tournament = { id: number; name: string; status: string | null };
@@ -52,9 +54,7 @@ export default function TeamDashboard() {
     load();
   }, []);
 
-  const payLink = useMemo(() => "https://pay.vzale.ru/stub", []);
-
-  async function mutate(body: any) {
+  async function mutate(body: Record<string, unknown>) {
     setLoading(true);
     setError(null);
     try {
@@ -261,12 +261,11 @@ export default function TeamDashboard() {
               </span>
             )}
             {data.registration ? (
-              <Link
-                href={payLink}
-                className="rounded-xl bg-gradient-to-r from-white/20 to-white/5 px-4 py-2 text-sm font-semibold text-white hover:from-vz_purple/40 hover:to-vz_green/40 transition"
-              >
-                Оплатить участие
-              </Link>
+              <PaymentModal
+                triggerText="Оплатить участие"
+                variant="ghost"
+                className="bg-gradient-to-r from-white/20 to-white/5"
+              />
             ) : null}
           </div>
         </div>

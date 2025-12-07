@@ -9,6 +9,7 @@ import {
   TournamentRow as TournamentDbRow,
 } from "@/lib/tournaments";
 import { TournamentSignup, TournamentOption } from "./components/TournamentSignup";
+import { PaymentModal } from "@/components/PaymentModal";
 
 type TeamMembership = {
   teamId: number;
@@ -1130,11 +1131,14 @@ export default async function MePage() {
 
         {profile.payments.length > 0 && (
           <section className="relative z-10 space-y-4">
-            <div>
-              <p className="text-xs uppercase tracking-[0.2em] text-white/60">
-                Оплата участия
-              </p>
-              <h2 className="text-xl md:text-2xl font-semibold">Статус платежей</h2>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.2em] text-white/60">
+                  Оплата участия
+                </p>
+                <h2 className="text-xl md:text-2xl font-semibold">Статус платежей</h2>
+              </div>
+              <PaymentModal triggerText="Оплатить взнос" variant="ghost" />
             </div>
             <div className="grid gap-3 md:grid-cols-2">
               {profile.payments.map((p) => (
@@ -1148,13 +1152,18 @@ export default async function MePage() {
                     </p>
                     <h3 className="text-lg font-semibold">Оплата участия</h3>
                   </div>
-                  <span
-                    className={`px-4 py-2 rounded-full border text-xs font-semibold ${
-                      p.paid ? "bg-vz_green/15 text-vz_green border-vz_green/30" : "bg-white/5 text-white/70 border-white/15"
-                    }`}
-                  >
-                    {p.paid ? "Оплачено" : "Ожидает оплаты"}
-                  </span>
+                  <div className="flex flex-col items-end gap-2">
+                    <span
+                      className={`px-4 py-2 rounded-full border text-xs font-semibold ${
+                        p.paid
+                          ? "bg-vz_green/15 text-vz_green border-vz_green/30"
+                          : "bg-white/5 text-white/70 border-white/15"
+                      }`}
+                    >
+                      {p.paid ? "Оплачено" : "Ожидает оплаты"}
+                    </span>
+                    {!p.paid && <PaymentModal triggerText="Оплатить" variant="ghost" className="px-3 py-1.5" />}
+                  </div>
                 </div>
               ))}
             </div>
