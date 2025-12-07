@@ -17,6 +17,11 @@ type TeamWithRoster = {
   }[];
 };
 
+type PaymentTeam = {
+  name: string;
+  paid: number;
+};
+
 type PlayerRow = {
   userId: string;
   teamId: string;
@@ -71,6 +76,13 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
   const [teams, setTeams] = useState<TeamWithRoster[]>([]);
   const [teamRosters, setTeamRosters] = useState<Record<number, TeamWithRoster["members"]>>({});
   const [teamsLoading, setTeamsLoading] = useState(false);
+  const [paymentTournamentId, setPaymentTournamentId] = useState(
+    tournamentList[0]?.id?.toString() || "",
+  );
+  const [payments, setPayments] = useState<PaymentTeam[]>([]);
+  const [paymentsLoading, setPaymentsLoading] = useState(false);
+  const [paymentsError, setPaymentsError] = useState<string | null>(null);
+  const [updatingTeam, setUpdatingTeam] = useState<string | null>(null);
   const [playerStats, setPlayerStats] = useState<PlayerRow[]>([
     {
       userId: "",
@@ -209,6 +221,78 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
     matchForm.teamHomeId,
     tournamentList,
   ]);
+
+  async function loadPayments(tournamentId: string) {
+    if (!tournamentId) {
+      setPayments([]);
+      return;
+    }
+
+    setPaymentsLoading(true);
+    setPaymentsError(null);
+
+    try {
+      const res = await fetch(`/api/admin/payments?tournamentId=${tournamentId}`);
+      const data = await res.json();
+
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || "Не удалось загрузить оплаты");
+      }
+
+      setPayments(data.teams as PaymentTeam[]);
+    } catch (err) {
+      setPaymentsError(
+        err instanceof Error ? err.message : "Не удалось загрузить оплаты",
+      );
+    } finally {
+      setPaymentsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (paymentTournamentId) {
+      loadPayments(paymentTournamentId);
+    }
+  }, [paymentTournamentId]);
+
+  useEffect(() => {
+    if (!paymentTournamentId && tournamentList[0]?.id) {
+      setPaymentTournamentId(tournamentList[0].id.toString());
+    }
+  }, [paymentTournamentId, tournamentList]);
+
+  async function updatePayment(teamName: string, paid: boolean) {
+    if (!paymentTournamentId) return;
+
+    setUpdatingTeam(teamName);
+    setPaymentsError(null);
+
+    try {
+      const res = await fetch(`/api/admin/payments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tournamentId: Number(paymentTournamentId),
+          teamName,
+          paid,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || "Не удалось обновить оплату");
+      }
+
+      await loadPayments(paymentTournamentId);
+    } catch (err) {
+      setPaymentsError(
+        err instanceof Error ? err.message : "Не удалось обновить оплату",
+      );
+    } finally {
+      setUpdatingTeam(null);
+    }
+  }
 
   async function createTournament(e: React.FormEvent) {
     e.preventDefault();
@@ -698,6 +782,81 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
                     </button>
                   )}
                 </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-2xl border border-white/10 bg-white/5 p-5 space-y-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-[0.2em] text-white/60">Оплаты</p>
+            <h3 className="text-lg font-semibold">Отметить оплату команд</h3>
+            <p className="text-sm text-white/70">
+              Ставьте отметку об оплате взноса — статус подтянется в бот и на сайте.
+            </p>
+          </div>
+          <label className="flex flex-col gap-2 text-sm w-full md:w-64">
+            <span className="text-white/70">Турнир</span>
+            <select
+              value={paymentTournamentId}
+              onChange={(e) => setPaymentTournamentId(e.target.value)}
+              className="rounded-xl bg-black/30 border border-white/15 px-3 py-2 text-white text-sm focus:border-vz_green focus:outline-none"
+            >
+              <option value="" disabled>
+                Выберите турнир
+              </option>
+              {tournamentList.map((t) => (
+                <option key={t.id} value={t.id} className="bg-black">
+                  #{t.id} — {t.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        {paymentsError && (
+          <div className="rounded-xl border border-red-400/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+            {paymentsError}
+          </div>
+        )}
+
+        {paymentsLoading ? (
+          <p className="text-sm text-white/70">Загружаем команды...</p>
+        ) : payments.length === 0 ? (
+          <p className="text-sm text-white/70">Пока нет команд в этом турнире.</p>
+        ) : (
+          <div className="space-y-2">
+            {payments.map((team) => (
+              <div
+                key={team.name}
+                className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/30 px-3 py-2"
+              >
+                <div>
+                  <p className="text-sm font-semibold">{team.name}</p>
+                  <p
+                    className={`text-xs ${
+                      team.paid
+                        ? "text-vz_green"
+                        : "text-white/60"
+                    }`}
+                  >
+                    {team.paid ? "Оплата отмечена" : "Без оплаты"}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => updatePayment(team.name, !team.paid)}
+                  disabled={updatingTeam === team.name || paymentsLoading}
+                  className={`text-xs rounded-full border px-3 py-1 font-semibold transition ${
+                    team.paid
+                      ? "border-white/25 text-white/80 hover:border-red-300/60 hover:text-red-100"
+                      : "border-vz_green/60 text-vz_green hover:border-vz_green hover:bg-vz_green/10"
+                  } disabled:opacity-60`}
+                >
+                  {team.paid ? "Снять отметку" : "Отметить оплату"}
+                </button>
               </div>
             ))}
           </div>
