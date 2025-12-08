@@ -4922,6 +4922,27 @@ async def admin_poll_start(callback: CallbackQuery, state: FSMContext):
 
 
 
+@router.message(AdminForm.waiting_poll_question)
+async def admin_poll_question(message: Message, state: FSMContext):
+    if message.text and message.text.lower().strip() == "отмена":
+        await state.clear()
+        await message.answer("❌ Отменено.", reply_markup=admin_menu_markup())
+        return
+
+    question = (message.html_text or message.text or "").strip()
+    if not question:
+        await message.answer("⚠️ Текст вопроса не должен быть пустым. Попробуй ещё раз или напиши <code>отмена</code>.")
+        return
+
+    await state.update_data(poll_question=question)
+    await message.answer(
+        "✍️ Теперь пришли варианты ответов. Каждый — с новой строки.\n"
+        "Минимум 2 и максимум 10 вариантов.\n"
+        "Для отмены напиши <code>отмена</code>."
+    )
+    await state.set_state(AdminForm.waiting_poll_options)
+
+
 @router.message(AdminForm.waiting_poll_options)
 async def admin_poll_options(message: Message, state: FSMContext):
     if message.text and message.text.lower().strip() == "отмена":
