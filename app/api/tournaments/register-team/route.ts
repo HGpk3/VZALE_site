@@ -48,47 +48,44 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const teamRow = db
-      .prepare(
-        "SELECT id, name FROM teams WHERE captain_user_id = ? AND LOWER(name) = LOWER(?)"
-      )
-      .get(telegramId, teamName) as { id: number; name: string } | undefined;
-
-    let teamId = teamRow?.id;
-    let createdTeam = false;
-
-    if (!teamId) {
-      const insertTeam = db.prepare(
-        "INSERT INTO teams (name, captain_user_id) VALUES (?, ?)"
-      );
-      const result = insertTeam.run(teamName, telegramId);
-      teamId = Number(result.lastInsertRowid);
-      createdTeam = true;
-    }
-
-    const duplicate = db
-      .prepare(
-        "SELECT id FROM tournament_teams WHERE tournament_id = ? AND team_id = ?"
-      )
-      .get(tournamentId, teamId) as { id: number } | undefined;
-
-    if (duplicate) {
-      return NextResponse.json(
-        { ok: false, error: "Эта команда уже зарегистрирована в турнире" },
-        { status: 400 }
-      );
-    }
-
     const transaction = db.transaction(() => {
+      const existingTeam = db
+        .prepare(
+          "SELECT id FROM teams_new WHERE tournament_id = ? AND LOWER(name) = LOWER(?)"
+        )
+        .get(tournamentId, teamName) as { id: number } | undefined;
+
+      if (existingTeam) {
+        return { kind: "duplicate" as const };
+      }
+
+      const lastTeam = db
+        .prepare(
+          "SELECT id FROM teams_new WHERE captain_user_id = ? ORDER BY id DESC LIMIT 1"
+        )
+        .get(telegramId) as { id: number } | undefined;
+
+      const insertTeam = db.prepare(
+        "INSERT INTO teams_new (tournament_id, name, captain_user_id, status) VALUES (?, ?, ?, 'active')"
+      );
+      const result = insertTeam.run(tournamentId, teamName, telegramId);
+      const teamId = Number(result.lastInsertRowid);
+
       db.prepare(
         "INSERT OR IGNORE INTO team_members (team_id, user_id, role, status, tournament_id) VALUES (?, ?, 'captain', 'confirmed', ?)"
       ).run(teamId, telegramId, tournamentId);
 
-      const lastRoster = db
-        .prepare(
-          "SELECT user_id as userId, role, status FROM team_members WHERE team_id = ? AND user_id <> ?"
-        )
-        .all(teamId, telegramId) as { userId: number; role: string | null; status: string | null }[];
+      const lastRoster = lastTeam
+        ? (db
+            .prepare(
+              "SELECT user_id as userId, role, status FROM team_members WHERE team_id = ? AND user_id <> ?"
+            )
+            .all(lastTeam.id, telegramId) as {
+            userId: number;
+            role: string | null;
+            status: string | null;
+          }[])
+        : [];
 
       let copiedMembers = 0;
       const insertMember = db.prepare(
@@ -109,24 +106,33 @@ export async function POST(req: NextRequest) {
         console.warn("[register-team] failed to create invite code", err);
       }
 
-      const reg = db
-        .prepare(
-          "INSERT INTO tournament_teams (tournament_id, team_id, registered_at) VALUES (?, ?, CURRENT_TIMESTAMP)"
-        )
-        .run(tournamentId, teamId);
+      try {
+        db.prepare(
+          "INSERT OR IGNORE INTO tournament_teams (tournament_id, team_id, registered_at) VALUES (?, ?, CURRENT_TIMESTAMP)"
+        ).run(tournamentId, teamId);
+      } catch (err) {
+        console.warn("[register-team] failed to mirror registration", err);
+      }
 
-      return { copiedMembers, inviteCode, registrationId: Number(reg.lastInsertRowid) };
+      return { kind: "created" as const, copiedMembers, inviteCode, teamId };
     });
 
-    const { copiedMembers, inviteCode, registrationId } = transaction();
+    const result = transaction();
+
+    if (result.kind === "duplicate") {
+      return NextResponse.json(
+        { ok: false, error: "Эта команда уже зарегистрирована в турнире" },
+        { status: 400 }
+      );
+    }
 
     return NextResponse.json({
       ok: true,
-      teamId,
-      registrationId,
-      createdTeam,
-      inviteCode,
-      copiedMembers,
+      teamId: result.teamId,
+      registrationId: null,
+      createdTeam: true,
+      inviteCode: result.inviteCode,
+      copiedMembers: result.copiedMembers,
     });
   } catch (err) {
     console.error("[register-team]", err);

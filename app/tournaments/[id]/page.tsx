@@ -3,9 +3,15 @@ import Link from "next/link";
 import { getDb } from "@/lib/db";
 import TournamentSelector from "./TournamentSelector";
 import { PaymentModal } from "@/components/PaymentModal";
+import { TournamentCountdown } from "@/components/Tournaments/TournamentCountdown";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
+// План по улучшению страницы турнира:
+// 1) Расширить хедер: статус, дата/место, стоимость, CTA и таймер.
+// 2) Добавить обучающий блок «Как всё проходит» и FAQ.
+// 3) Усилить блок команд с краткой сводкой и адаптивной вёрсткой.
 
 type TournamentStatus =
   | "draft"
@@ -133,6 +139,13 @@ function parseSettings(settingsJson: string | null) {
       description?: string;
       format?: string;
       prizes?: string;
+      price?: string | number;
+      entryFee?: string | number;
+      fee?: string | number;
+      teamLimit?: number;
+      teamsLimit?: number;
+      maxTeams?: number;
+      registrationDeadline?: string;
     };
   } catch (err) {
     console.error("[tournament] failed to parse settings_json", err);
@@ -187,11 +200,10 @@ function getTeams(tournamentId: number): TeamWithRoster[] {
   let teams = db
     .prepare(
       `
-        SELECT t.id, t.name, 0 AS paid, tt.registered_at AS registeredAt
-        FROM tournament_teams tt
-        JOIN teams t ON t.id = tt.team_id
-        WHERE tt.tournament_id = ?
-        ORDER BY t.name ASC
+        SELECT tn.id, tn.name, 0 AS paid, tn.created_at AS registeredAt
+        FROM teams_new tn
+        WHERE tn.tournament_id = ?
+        ORDER BY tn.name ASC
       `,
     )
     .all(tournamentId) as TeamRow[];
@@ -440,6 +452,9 @@ export default function TournamentPage({ params }: { params: { id: string } }) {
   const settings = row ? parseSettings(row.settingsJson) : null;
   const canRegister = status === "registration_open";
   const playerStatsMap = getPlayerStatsMap(selectedId);
+  const teamLimit = settings?.teamLimit || settings?.teamsLimit || settings?.maxTeams || null;
+  const price = settings?.price ?? settings?.entryFee ?? settings?.fee ?? null;
+  const countdownTarget = settings?.registrationDeadline || row?.dateStart;
 
   function matchStatusBadge(value: string | null) {
     switch (value) {
@@ -480,17 +495,62 @@ export default function TournamentPage({ params }: { params: { id: string } }) {
             />
           </div>
 
-          <div className="flex flex-wrap items-center gap-3 text-sm md:text-base text-white/80">
-            {row?.dateStart && <span>{row.dateStart}</span>}
-            {row?.dateStart && row?.venue && <span className="text-white/60">•</span>}
-            {row?.venue && <span>{row.venue}</span>}
-          </div>
+          <div className="grid gap-4 md:grid-cols-[2fr,1.1fr] md:items-center">
+            <div className="space-y-3 rounded-3xl border border-white/10 bg-white/5 p-4 md:p-6 shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
+              <div className="flex flex-wrap items-center gap-2 text-sm md:text-base text-white/80">
+                {row?.dateStart && <span>{row.dateStart}</span>}
+                {row?.dateStart && row?.venue && <span className="text-white/60">•</span>}
+                {row?.venue && <span>{row.venue}</span>}
+              </div>
 
-          <span
-            className={`inline-flex items-center px-4 py-1 rounded-full border bg-white/5 text-xs md:text-sm font-semibold ${statusColor[status]}`}
-          >
-            {statusLabel[status]}
-          </span>
+              <div className="flex flex-wrap items-center gap-2 text-xs md:text-sm text-white/80">
+                <span
+                  className={`inline-flex items-center px-4 py-1 rounded-full border bg-white/5 font-semibold uppercase tracking-wide ${statusColor[status]}`}
+                >
+                  {statusLabel[status]}
+                </span>
+                {price ? (
+                  <span className="inline-flex items-center px-3 py-1 rounded-full border border-white/10 bg-white/5">
+                    Взнос: <span className="ml-1 font-semibold text-white">{price}</span>
+                  </span>
+                ) : null}
+                {teamLimit ? (
+                  <span className="inline-flex items-center px-3 py-1 rounded-full border border-white/10 bg-white/5">
+                    Команды: {teams.length} / {teamLimit}
+                  </span>
+                ) : teams.length ? (
+                  <span className="inline-flex items-center px-3 py-1 rounded-full border border-white/10 bg-white/5">
+                    Уже зарегистрировано: {teams.length}
+                  </span>
+                ) : null}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <Link
+                  href={canRegister ? "/participate" : `/tournaments/${selectedId}`}
+                  className={`inline-flex items-center justify-center px-5 py-3 rounded-xl text-sm md:text-base font-semibold transition ${
+                    canRegister
+                      ? "bg-vz_green text-black shadow-[0_0_30px_rgba(164,255,79,0.5)] hover:brightness-110"
+                      : "bg-white/10 border border-white/20 text-white hover:bg-white/15"
+                  }`}
+                >
+                  {canRegister ? "Участвовать" : "Подробнее"}
+                </Link>
+                <Link
+                  href="/participate"
+                  className="inline-flex items-center justify-center px-5 py-3 rounded-xl border border-white/15 bg-white/5 text-sm md:text-base font-semibold text-white hover:bg-white/10 transition"
+                >
+                  Войти через Telegram, чтобы участвовать
+                </Link>
+              </div>
+            </div>
+
+            {countdownTarget ? (
+              <div className="flex md:justify-end">
+                <TournamentCountdown target={countdownTarget} />
+              </div>
+            ) : null}
+          </div>
 
           {showEmptyState ? (
             <div className="mt-4 rounded-2xl border border-white/15 bg-white/5 p-4 text-sm text-white/75">
@@ -560,10 +620,35 @@ export default function TournamentPage({ params }: { params: { id: string } }) {
           </aside>
         </section>
 
+        {/* Как всё проходит */}
         <section className="rounded-3xl bg-white/5 border border-white/10 p-6 md:p-7 shadow-[0_20px_60px_rgba(0,0,0,0.6)] space-y-4">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
             <div>
-              <p className="text-xs uppercase tracking-[0.2em] text-white/60">Участники</p>
+              <p className="text-xs uppercase tracking-[0.2em] text-white/60">Как всё проходит</p>
+              <h2 className="text-xl md:text-2xl font-semibold">4 шага до игры</h2>
+            </div>
+            <span className="text-xs text-white/60">Регистрация и оплата остаются в текущем потоке VZALE</span>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
+            {["Регистрируешься на сайте или через бота", "Оплачиваешь участие", "Получаешь подтверждение и расписание", "Приходишь и играешь 3×3"].map(
+              (step, idx) => (
+                <div
+                  key={step}
+                  className="rounded-2xl border border-white/10 bg-black/20 p-4 flex flex-col gap-2"
+                >
+                  <span className="text-xs text-white/60">Шаг {idx + 1}</span>
+                  <p className="text-sm md:text-base text-white">{step}</p>
+                </div>
+              )
+            )}
+          </div>
+        </section>
+
+        <section className="rounded-3xl bg-white/5 border border-white/10 p-6 md:p-7 shadow-[0_20px_60px_rgba(0,0,0,0.6)] space-y-4">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-[0.2em] text-white/60">Кто уже в игре</p>
               <h2 className="text-xl md:text-2xl font-semibold">Команды турнира</h2>
             </div>
             <span className="text-xs text-white/60">
@@ -591,6 +676,9 @@ export default function TournamentPage({ params }: { params: { id: string } }) {
                         {team.wins + team.losses === 0
                           ? "Ещё нет сыгранных матчей"
                           : `${team.wins}-${team.losses} (W-L)`}
+                      </p>
+                      <p className="text-[11px] text-white/60">
+                        Игроков в составе: {team.roster.length || "—"}
                       </p>
                     </div>
                     <span
@@ -729,7 +817,49 @@ export default function TournamentPage({ params }: { params: { id: string } }) {
                 </div>
               ))}
             </div>
-          )}
+        )}
+      </section>
+
+        {/* FAQ */}
+        <section className="rounded-3xl bg-white/5 border border-white/10 p-6 md:p-7 shadow-[0_20px_60px_rgba(0,0,0,0.6)] space-y-4">
+          <div className="space-y-1">
+            <p className="text-xs uppercase tracking-[0.2em] text-white/60">FAQ</p>
+            <h2 className="text-xl md:text-2xl font-semibold">Частые вопросы</h2>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            {[
+              {
+                q: "Нужно ли быть профессионалом?",
+                a: "Нет, турнир любительский. Главное — любить баскетбол и следовать регламенту.",
+              },
+              {
+                q: "Можно ли зарегистрироваться одному?",
+                a: "Да, мы помогаем собрать команды из соло-игроков, если это допускает регламент турнира.",
+              },
+              {
+                q: "Можно ли вернуть взнос?",
+                a: "Уточняйте условия возврата у организаторов. Мы стараемся идти навстречу, если это возможно по срокам.",
+              },
+              {
+                q: "Нужна ли медсправка?",
+                a: "Смотрите актуальные требования в описании турнира и в официальных каналах VZALE.",
+              },
+              {
+                q: "Как узнать расписание?",
+                a: "После подтверждения участия расписание приходит в боте и появляется в карточке турнира.",
+              },
+              {
+                q: "Что если нет команды?",
+                a: "Подайте заявку как свободный игрок — мы постараемся подобрать вам команду при наличии слотов.",
+              },
+            ].map((item) => (
+              <div key={item.q} className="rounded-2xl border border-white/10 bg-black/20 p-4 space-y-1">
+                <p className="text-sm font-semibold text-white">{item.q}</p>
+                <p className="text-xs md:text-sm text-white/75 leading-relaxed">{item.a}</p>
+              </div>
+            ))}
+          </div>
         </section>
 
         <Link
