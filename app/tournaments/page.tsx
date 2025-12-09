@@ -6,12 +6,19 @@ import TournamentCard from "../components/Tournaments/TournamentCard";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
+// План по доработке страницы списка турниров:
+// 1) Расширить выборку турниров дополнительными полями и подсчётом команд.
+// 2) Обогатить карточки данными (дата, площадка, стоимость, прогресс по командам, статусы).
+// 3) Сохранить сортировку и адаптивную сетку без ломки существующего стиля.
+
 type TournamentRow = {
   id: number;
   name: string;
   status: string | null;
   dateStart: string | null;
   venue: string | null;
+  settingsJson: string | null;
+  teamCount: number;
 };
 
 const statusPriority: Record<string, number> = {
@@ -28,7 +35,23 @@ function fetchTournaments(): TournamentRow[] {
   const db = getDb();
   return db
     .prepare(
-      "SELECT id, name, status, date_start as dateStart, venue FROM tournaments ORDER BY id DESC"
+      `
+        SELECT
+          t.id,
+          t.name,
+          t.status,
+          t.date_start as dateStart,
+          t.venue,
+          t.settings_json as settingsJson,
+          COALESCE(cnt.totalTeams, 0) as teamCount
+        FROM tournaments t
+        LEFT JOIN (
+          SELECT tournament_id, COUNT(*) as totalTeams
+          FROM teams_new
+          GROUP BY tournament_id
+        ) as cnt ON cnt.tournament_id = t.id
+        ORDER BY t.id DESC
+      `
     )
     .all() as TournamentRow[];
 }
@@ -64,6 +87,23 @@ function normalizeStatus(status: string | null):
       | "archived";
   }
   return null;
+}
+
+function parseSettings(settingsJson: string | null) {
+  if (!settingsJson) return null;
+  try {
+    return JSON.parse(settingsJson) as {
+      teamLimit?: number;
+      teamsLimit?: number;
+      maxTeams?: number;
+      price?: string | number;
+      entryFee?: string | number;
+      fee?: string | number;
+    };
+  } catch (error) {
+    console.error("[tournaments] failed to parse settings_json", error);
+    return null;
+  }
 }
 
 export default function TournamentsPage() {
@@ -107,16 +147,27 @@ export default function TournamentsPage() {
           </div>
         ) : (
           <section className="grid gap-6 md:grid-cols-2">
-            {tournaments.map((t) => (
-              <TournamentCard
-                key={t.id}
-                id={t.id}
-                title={t.name}
-                date={t.dateStart}
-                place={t.venue}
-                status={normalizeStatus(t.status)}
-              />
-            ))}
+            {tournaments.map((t) => {
+              const settings = parseSettings(t.settingsJson);
+              const teamLimit = settings?.teamLimit || settings?.teamsLimit || settings?.maxTeams || null;
+              const price = settings?.price ?? settings?.entryFee ?? settings?.fee ?? null;
+
+              return (
+                // Достаём дополнительные данные из настроек турнира
+                // и передаём их в карточку для прогресса и стоимости.
+                <TournamentCard
+                  key={t.id}
+                  id={t.id}
+                  title={t.name}
+                  date={t.dateStart}
+                  place={t.venue}
+                  status={normalizeStatus(t.status)}
+                  teamCount={t.teamCount}
+                  teamLimit={teamLimit}
+                  price={price}
+                />
+              );
+            })}
           </section>
         )}
       </div>
