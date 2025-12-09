@@ -829,8 +829,7 @@ async def backfill_team_codes():
     # ==== TOURNAMENT DB HELPERS ====
 
 def db():
-
-    return sqlite3.connect("tournament.db")
+    return sqlite3.connect(DB_PATH)
 
 def get_tournaments(active_only=False):
     with db() as con:
@@ -1403,7 +1402,7 @@ def kb_tournament_menu(tid: int, user_id: int):
     rows.append([InlineKeyboardButton(text="👥 Моя команда (этот турнир)", callback_data=f"t_myteam:{tid}")])
 
     if in_team:
-        """ rows.append([InlineKeyboardButton(text="💳 Оплатить взнос", callback_data=f"t_pay:{tid}")])"""
+        rows.append([InlineKeyboardButton(text="💳 Оплатить взнос", callback_data=f"t_pay:{tid}")])
         rows.append([InlineKeyboardButton(text="🚪 Выйти из команды", callback_data=f"t_leave:{tid}")])
 
     rows += [
@@ -1464,9 +1463,7 @@ async def t_pay(cb: CallbackQuery):
 
     text = (
         "<b>Оплата взноса</b>\n\n"
-        "🧑 За игрока — 500 ₽\n"
-        "👥 За команду (до 3 игроков) — 1500 ₽\n"
-        "👥 За команду (4 игрока и более) — 2000 ₽\n\n"
+        "👥 За одного игрока - 450₽\n"
         "Нажми на кнопку ниже, чтобы открыть приложение банка и перевести нужную сумму.\n"
         "❗ В комментарии к переводу укажи название своей команды."
     )

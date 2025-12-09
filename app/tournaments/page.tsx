@@ -1,65 +1,31 @@
-import { getDb } from "@/lib/db";
 import TournamentCard from "../components/Tournaments/TournamentCard";
 
-type TournamentRow = {
-  id: number;
-  name: string;
-  status: string | null;
-  dateStart: string | null;
-  venue: string | null;
-};
-
-const statusPriority: Record<string, number> = {
-  registration_open: 1,
-  announced: 2,
-  running: 3,
-  draft: 4,
-  closed: 5,
-  finished: 6,
-  archived: 7,
-};
-
-function fetchTournaments(): TournamentRow[] {
-  const db = getDb();
-  return db
-    .prepare(
-      "SELECT id, name, status, date_start as dateStart, venue FROM tournaments ORDER BY id DESC"
-    )
-    .all() as TournamentRow[];
-}
-
-function normalizeStatus(status: string | null):
-  | "draft"
-  | "announced"
-  | "registration_open"
-  | "closed"
-  | "running"
-  | "finished"
-  | "archived"
-  | null {
-  if (!status) return null;
-  if (
-    [
-      "draft",
-      "announced",
-      "registration_open",
-      "closed",
-      "running",
-      "finished",
-      "archived",
-    ].includes(status)
-  ) {
-    return status as
-      | "draft"
-      | "announced"
-      | "registration_open"
-      | "closed"
-      | "running"
-      | "finished"
-      | "archived";
-  }
-  return null;
-}
+const mockTournaments = [
+  {
+    id: 1,
+    title: "VZALE STREET OPEN",
+    date: "27 апреля · 13:00",
+    place: "Санкт-Петербург, площадка VZALE",
+    status: "upcoming" as const,
+    type: "Любительский 3×3 · до 12 команд",
+  },
+  {
+    id: 2,
+    title: "VZALE NIGHT RUN",
+    date: "15 июня · 18:00",
+    place: "Санкт-Петербург, outdoor площадка",
+    status: "upcoming" as const,
+    type: "Вечерний турнир · музыка · медиа",
+  },
+  {
+    id: 3,
+    title: "VZALE SEASON FINALS",
+    date: "Состоялся: 5 марта",
+    place: "Санкт-Петербург",
+    status: "finished" as const,
+    type: "Финальный турнир сезона",
+  },
+];
 
 export default function TournamentsPage() {
   const tournaments = fetchTournaments().sort((a, b) => {
@@ -85,27 +51,29 @@ export default function TournamentsPage() {
             Здесь можно посмотреть ближайшие турниры, те, которые идут прямо
             сейчас, и прошедшие ивенты VZALE.
           </p>
+          <div className="pt-2">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-2 rounded-full border border-vz_text/10 bg-white px-4 py-2 text-sm font-semibold text-vz_text shadow-sm hover:-translate-y-0.5 hover:shadow-md transition"
+            >
+              ← На главную
+            </Link>
+          </div>
         </header>
 
-        {tournaments.length === 0 ? (
-          <div className="rounded-3xl bg-white/80 border border-white/60 p-6 text-neutral-800 text-sm shadow-lg">
-            Пока нет ни одного турнира. Создайте его через админскую панель или
-            бот, и данные появятся здесь автоматически.
-          </div>
-        ) : (
-          <section className="grid gap-6 md:grid-cols-2">
-            {tournaments.map((t) => (
-              <TournamentCard
-                key={t.id}
-                id={t.id}
-                title={t.name}
-                date={t.dateStart}
-                place={t.venue}
-                status={normalizeStatus(t.status)}
-              />
-            ))}
-          </section>
-        )}
+        <section className="grid gap-6 md:grid-cols-2">
+          {mockTournaments.map((t) => (
+            <TournamentCard
+              key={t.id}
+              id={t.id}
+              title={t.title}
+              date={t.date}
+              place={t.place}
+              status={t.status}
+              type={t.type}
+            />
+          ))}
+        </section>
       </div>
     </main>
   );

@@ -9,11 +9,30 @@ function resolveDbPath() {
   const envPath = process.env.DB_PATH?.trim();
   if (envPath) return envPath;
 
-  const botDb = path.join(process.cwd(), "VZALE_BOT", "tournament.db");
-  if (fs.existsSync(botDb)) return botDb;
+  const seen = new Set<string>();
+  let dir = process.cwd();
+
+  // Поднимаемся вверх от текущей директории и ищем файл в типовых местах,
+  // чтобы Next.js в .next/server тоже находил реальную базу, а не создавал пустую.
+  while (!seen.has(dir)) {
+    seen.add(dir);
+
+    const candidates = [
+      path.join(dir, "VZALE_BOT", "tournament.db"),
+      path.join(dir, "tournament.db"),
+    ];
+
+    for (const candidate of candidates) {
+      if (fs.existsSync(candidate)) return candidate;
+    }
+
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
 
   // запасной вариант — пустая база в корне проекта, если бот ещё не положил свою
-  return path.join(process.cwd(), "tournament.db");
+  return path.join(process.cwd(), "VZALE_BOT", "tournament.db");
 }
 
 function initDatabase() {
@@ -35,6 +54,21 @@ function initDatabase() {
       username TEXT NOT NULL,
       password_hash TEXT NOT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS teams (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      captain_user_id INTEGER NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS tournament_teams (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tournament_id INTEGER NOT NULL,
+      team_id INTEGER NOT NULL,
+      registered_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(tournament_id, team_id)
     );
   `);
 

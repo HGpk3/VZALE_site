@@ -1,11 +1,40 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { TournamentOption } from "./TournamentSignup";
 
 interface AdminPanelProps {
   tournaments: TournamentOption[];
 }
+
+type TeamWithRoster = {
+  id: number;
+  name: string;
+  tournamentId: number | null;
+  members: {
+    userId: number;
+    fullName: string | null;
+  }[];
+};
+
+type PaymentTeam = {
+  name: string;
+  paid: number;
+};
+
+type PlayerRow = {
+  userId: string;
+  teamId: string;
+  points: string;
+  threes: string;
+  assists: string;
+  rebounds: string;
+  steals: string;
+  blocks: string;
+  fouls: string;
+  turnovers: string;
+  minutes: string;
+};
 
 const statusLabels: Record<string, string> = {
   draft: "Черновик",
@@ -20,6 +49,7 @@ const statusLabels: Record<string, string> = {
 const statusOptions = Object.entries(statusLabels);
 
 export function AdminPanel({ tournaments }: AdminPanelProps) {
+  const [tournamentList, setTournamentList] = useState(tournaments);
   const [name, setName] = useState("");
   const [venue, setVenue] = useState("");
   const [dateStart, setDateStart] = useState("");
@@ -28,6 +58,241 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [statusLoading, setStatusLoading] = useState<number | null>(null);
+  const [matchLoading, setMatchLoading] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editLoading, setEditLoading] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editVenue, setEditVenue] = useState("");
+  const [editDateStart, setEditDateStart] = useState("");
+  const [matchForm, setMatchForm] = useState({
+    tournamentId: tournamentList[0]?.id?.toString() || "",
+    stage: "",
+    status: "finished",
+    teamHomeId: "",
+    teamAwayId: "",
+    scoreHome: "",
+    scoreAway: "",
+  });
+  const [teams, setTeams] = useState<TeamWithRoster[]>([]);
+  const [teamRosters, setTeamRosters] = useState<Record<number, TeamWithRoster["members"]>>({});
+  const [teamsLoading, setTeamsLoading] = useState(false);
+  const [paymentTournamentId, setPaymentTournamentId] = useState(
+    tournamentList[0]?.id?.toString() || "",
+  );
+  const [payments, setPayments] = useState<PaymentTeam[]>([]);
+  const [paymentsLoading, setPaymentsLoading] = useState(false);
+  const [paymentsError, setPaymentsError] = useState<string | null>(null);
+  const [updatingTeam, setUpdatingTeam] = useState<string | null>(null);
+  const [playerStats, setPlayerStats] = useState<PlayerRow[]>([
+    {
+      userId: "",
+      teamId: "",
+      points: "",
+      threes: "",
+      assists: "",
+      rebounds: "",
+      steals: "",
+      blocks: "",
+      fouls: "",
+      turnovers: "",
+      minutes: "",
+    },
+  ]);
+  const lastLoadedTournamentId = useRef<string | null>(null);
+
+  useEffect(() => {
+    const loadTeams = async (tournamentId: string) => {
+      if (!tournamentId) {
+        setTeams([]);
+        setTeamRosters({});
+        return;
+      }
+
+      setTeamsLoading(true);
+      try {
+        const res = await fetch(
+          `/api/admin/matches/options?tournamentId=${tournamentId}`
+        );
+        const data = await res.json();
+        if (!res.ok || !data?.ok) {
+          throw new Error(data?.error || "Не удалось загрузить команды");
+        }
+
+        const rosterMap: Record<number, TeamWithRoster["members"]> = {};
+        (data.teams as TeamWithRoster[]).forEach((team) => {
+          rosterMap[team.id] = team.members;
+        });
+
+        setTeams(data.teams as TeamWithRoster[]);
+        setTeamRosters(rosterMap);
+
+        setMatchForm((prev) => {
+          let nextHome = prev.teamHomeId;
+          let nextAway = prev.teamAwayId;
+
+          if (data.teams?.length) {
+            const firstTeam = data.teams[0];
+            if (
+              !nextHome ||
+              !data.teams.some((t: TeamWithRoster) => t.id.toString() === nextHome)
+            ) {
+              nextHome = firstTeam.id.toString();
+            }
+
+            if (
+              !nextAway ||
+              nextAway === nextHome ||
+              !data.teams.some((t: TeamWithRoster) => t.id.toString() === nextAway)
+            ) {
+              const alt = (data.teams as TeamWithRoster[]).find(
+                (t) => t.id.toString() !== nextHome
+              );
+              nextAway = alt ? alt.id.toString() : "";
+            }
+          } else {
+            nextHome = "";
+            nextAway = "";
+          }
+
+          return { ...prev, teamHomeId: nextHome, teamAwayId: nextAway };
+        });
+
+        setPlayerStats((prev) => {
+          const hasData = prev.some(
+            (ps) =>
+              ps.userId ||
+              ps.points ||
+              ps.assists ||
+              ps.rebounds ||
+              ps.steals ||
+              ps.blocks ||
+              ps.threes ||
+              ps.fouls ||
+              ps.turnovers ||
+              ps.minutes
+          );
+
+          if (hasData) return prev;
+
+          const autoRows: PlayerRow[] = [];
+          const addRoster = (teamId: string) => {
+            if (!teamId) return;
+            const roster = rosterMap[Number(teamId)] || [];
+            roster.forEach((player) => {
+              autoRows.push({
+                userId: player.userId.toString(),
+                teamId,
+                points: "",
+                threes: "",
+                assists: "",
+                rebounds: "",
+                steals: "",
+                blocks: "",
+                fouls: "",
+                turnovers: "",
+                minutes: "",
+              });
+            });
+          };
+
+          addRoster(matchForm.teamHomeId || data.teams?.[0]?.id?.toString() || "");
+          addRoster(matchForm.teamAwayId || data.teams?.[1]?.id?.toString() || "");
+
+          return autoRows.length ? autoRows : prev;
+        });
+      } catch (err) {
+        console.error("[admin] failed to load teams", err);
+      } finally {
+        setTeamsLoading(false);
+      }
+    };
+
+    const tournamentId =
+      matchForm.tournamentId || tournamentList[0]?.id?.toString();
+    if (!tournamentId) return;
+
+    if (lastLoadedTournamentId.current === tournamentId) return;
+    lastLoadedTournamentId.current = tournamentId;
+
+    loadTeams(tournamentId);
+  }, [
+    matchForm.tournamentId,
+    matchForm.teamAwayId,
+    matchForm.teamHomeId,
+    tournamentList,
+  ]);
+
+  async function loadPayments(tournamentId: string) {
+    if (!tournamentId) {
+      setPayments([]);
+      return;
+    }
+
+    setPaymentsLoading(true);
+    setPaymentsError(null);
+
+    try {
+      const res = await fetch(`/api/admin/payments?tournamentId=${tournamentId}`);
+      const data = await res.json();
+
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || "Не удалось загрузить оплаты");
+      }
+
+      setPayments(data.teams as PaymentTeam[]);
+    } catch (err) {
+      setPaymentsError(
+        err instanceof Error ? err.message : "Не удалось загрузить оплаты",
+      );
+    } finally {
+      setPaymentsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (paymentTournamentId) {
+      loadPayments(paymentTournamentId);
+    }
+  }, [paymentTournamentId]);
+
+  useEffect(() => {
+    if (!paymentTournamentId && tournamentList[0]?.id) {
+      setPaymentTournamentId(tournamentList[0].id.toString());
+    }
+  }, [paymentTournamentId, tournamentList]);
+
+  async function updatePayment(teamName: string, paid: boolean) {
+    if (!paymentTournamentId) return;
+
+    setUpdatingTeam(teamName);
+    setPaymentsError(null);
+
+    try {
+      const res = await fetch(`/api/admin/payments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tournamentId: Number(paymentTournamentId),
+          teamName,
+          paid,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || "Не удалось обновить оплату");
+      }
+
+      await loadPayments(paymentTournamentId);
+    } catch (err) {
+      setPaymentsError(
+        err instanceof Error ? err.message : "Не удалось обновить оплату",
+      );
+    } finally {
+      setUpdatingTeam(null);
+    }
+  }
 
   async function createTournament(e: React.FormEvent) {
     e.preventDefault();
@@ -49,6 +314,16 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
       setVenue("");
       setDateStart("");
       setStatus("registration_open");
+      setTournamentList((prev) => [
+        {
+          id: data.id,
+          name,
+          venue,
+          dateStart,
+          status,
+        },
+        ...prev,
+      ]);
     } catch (err) {
       if (err instanceof Error) {
         setError(err.message);
@@ -75,6 +350,16 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
         throw new Error(data?.error || "Не удалось обновить статус");
       }
       setMessage("Статус обновлён. Обновите страницу, чтобы увидеть изменения.");
+      setTournamentList((prev) =>
+        prev.map((t) =>
+          t.id === id
+            ? {
+                ...t,
+                status: newStatus,
+              }
+            : t
+        )
+      );
     } catch (err) {
       if (err instanceof Error) {
         setError(err.message);
@@ -83,6 +368,236 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
       }
     } finally {
       setStatusLoading(null);
+    }
+  }
+
+  function updateStatField(
+    index: number,
+    field: string,
+    value: string
+  ) {
+    setPlayerStats((prev) => {
+      const next = [...prev];
+      next[index] = {
+        ...next[index],
+        [field]: value,
+        ...(field === "teamId" ? { userId: "" } : {}),
+      };
+      return next;
+    });
+  }
+
+  function addPlayerRow() {
+    setPlayerStats((prev) => [
+      ...prev,
+      {
+        userId: "",
+        teamId: matchForm.teamHomeId || matchForm.teamAwayId || "",
+        points: "",
+        threes: "",
+        assists: "",
+        rebounds: "",
+        steals: "",
+        blocks: "",
+        fouls: "",
+        turnovers: "",
+        minutes: "",
+      },
+    ]);
+  }
+
+  function removePlayerRow(index: number) {
+    setPlayerStats((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function startEdit(tournamentId: number) {
+    const current = tournamentList.find((t) => t.id === tournamentId);
+    if (!current) return;
+    setEditingId(tournamentId);
+    setEditName(current.name || "");
+    setEditVenue(current.venue || "");
+    setEditDateStart(current.dateStart || "");
+    setMessage(null);
+    setError(null);
+  }
+
+  async function submitTournamentEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingId) return;
+    setEditLoading(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/admin/tournaments", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editingId,
+          name: editName,
+          venue: editVenue,
+          dateStart: editDateStart,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || "Не удалось обновить турнир");
+      }
+
+      setTournamentList((prev) =>
+        prev.map((t) =>
+          t.id === editingId
+            ? {
+                ...t,
+                name: editName,
+                venue: editVenue || null,
+                dateStart: editDateStart || null,
+              }
+            : t
+        )
+      );
+
+      setMessage("Турнир обновлён. Обновите страницу, чтобы увидеть изменения.");
+      setEditingId(null);
+      setEditName("");
+      setEditVenue("");
+      setEditDateStart("");
+    } catch (err) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("Неизвестная ошибка");
+      }
+    } finally {
+      setEditLoading(false);
+    }
+  }
+
+  function autofillRosters() {
+    const rows: PlayerRow[] = [];
+    const addRoster = (teamId: string) => {
+      if (!teamId) return;
+      const roster = teamRosters[Number(teamId)] || [];
+      roster.forEach((player) => {
+        rows.push({
+          userId: player.userId.toString(),
+          teamId,
+          points: "",
+          threes: "",
+          assists: "",
+          rebounds: "",
+          steals: "",
+          blocks: "",
+          fouls: "",
+          turnovers: "",
+          minutes: "",
+        });
+      });
+    };
+
+    addRoster(matchForm.teamHomeId);
+    addRoster(matchForm.teamAwayId);
+
+    if (rows.length === 0) return;
+    setPlayerStats(rows);
+  }
+
+  async function submitMatch(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setMessage(null);
+    setMatchLoading(true);
+    try {
+      const teamHome = teams.find((t) => t.id.toString() === matchForm.teamHomeId);
+      const teamAway = teams.find((t) => t.id.toString() === matchForm.teamAwayId);
+
+      if (!teamHome || !teamAway) {
+        throw new Error("Выберите обе команды из списка турнира");
+      }
+
+      const preparedStats = playerStats
+        .map((ps) => ({
+          userId: ps.userId.trim(),
+          teamId: ps.teamId.trim(),
+          points: ps.points.trim(),
+          threes: ps.threes.trim(),
+          assists: ps.assists.trim(),
+          rebounds: ps.rebounds.trim(),
+          steals: ps.steals.trim(),
+          blocks: ps.blocks.trim(),
+          fouls: ps.fouls.trim(),
+          turnovers: ps.turnovers.trim(),
+          minutes: ps.minutes.trim(),
+        }))
+        .filter((ps) => ps.userId && ps.teamId);
+
+      const res = await fetch("/api/admin/matches", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...matchForm,
+          tournamentId: Number(matchForm.tournamentId),
+          teamHomeName: teamHome.name,
+          teamAwayName: teamAway.name,
+          scoreHome:
+            matchForm.scoreHome === "" ? null : Number(matchForm.scoreHome),
+          scoreAway:
+            matchForm.scoreAway === "" ? null : Number(matchForm.scoreAway),
+          playerStats: preparedStats.map((ps) => ({
+            ...ps,
+            teamName:
+              teams.find((t) => t.id.toString() === ps.teamId)?.name || "",
+            userId: Number(ps.userId),
+            points: ps.points === "" ? 0 : Number(ps.points),
+            threes: ps.threes === "" ? 0 : Number(ps.threes),
+            assists: ps.assists === "" ? 0 : Number(ps.assists),
+            rebounds: ps.rebounds === "" ? 0 : Number(ps.rebounds),
+            steals: ps.steals === "" ? 0 : Number(ps.steals),
+            blocks: ps.blocks === "" ? 0 : Number(ps.blocks),
+            fouls: ps.fouls === "" ? 0 : Number(ps.fouls),
+            turnovers: ps.turnovers === "" ? 0 : Number(ps.turnovers),
+            minutes: ps.minutes === "" ? 0 : Number(ps.minutes),
+          })),
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || "Не удалось сохранить матч");
+      }
+
+      setMessage(`Матч сохранён (ID ${data.matchId}). Статистика обновлена.`);
+      setMatchForm({
+        tournamentId: tournamentList[0]?.id?.toString() || "",
+        stage: "",
+        status: "finished",
+        teamHomeId: "",
+        teamAwayId: "",
+        scoreHome: "",
+        scoreAway: "",
+      });
+      setPlayerStats([
+        {
+          userId: "",
+          teamId: "",
+          points: "",
+          threes: "",
+          assists: "",
+          rebounds: "",
+          steals: "",
+          blocks: "",
+          fouls: "",
+          turnovers: "",
+          minutes: "",
+        },
+      ]);
+    } catch (err) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("Неизвестная ошибка");
+      }
+    } finally {
+      setMatchLoading(false);
     }
   }
 
@@ -173,11 +688,11 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
           </div>
         </div>
 
-        {tournaments.length === 0 ? (
+        {tournamentList.length === 0 ? (
           <p className="text-sm text-white/70">Пока нет созданных турниров.</p>
         ) : (
           <div className="space-y-3">
-            {tournaments.map((t) => (
+            {tournamentList.map((t) => (
               <div
                 key={t.id}
                 className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 rounded-xl border border-white/10 bg-black/30 p-4"
@@ -186,31 +701,514 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
                   <p className="text-sm text-white/60">Турнир #{t.id}</p>
                   <h4 className="text-base font-semibold">{t.name}</h4>
                   <p className="text-xs text-white/60">
-                    {statusLabels[t.status] || t.status}
+                    {(t.status ? statusLabels[t.status] || t.status : "Без статуса")}
                     {t.dateStart ? ` • ${t.dateStart}` : ""}
                   </p>
                 </div>
-                <div className="flex flex-wrap gap-2 text-xs">
-                  {statusOptions.map(([value, label]) => (
-                    <button
-                      key={value}
-                      onClick={() => updateStatus(t.id, value)}
-                      disabled={statusLoading === t.id}
-                      className={`rounded-full border px-3 py-1 font-semibold transition ${
-                        t.status === value
-                          ? "bg-vz_green/20 border-vz_green/40 text-vz_green"
-                          : "bg-white/10 border-white/20 text-white/80 hover:bg-white/20"
-                      }`}
+                <div className="flex flex-col items-start gap-2 md:items-end md:justify-end">
+                  <div className="flex flex-wrap gap-2 text-xs justify-start md:justify-end w-full">
+                    {statusOptions.map(([value, label]) => (
+                      <button
+                        key={value}
+                        onClick={() => updateStatus(t.id, value)}
+                        disabled={statusLoading === t.id}
+                        className={`rounded-full border px-3 py-1 font-semibold transition ${
+                          t.status === value
+                            ? "bg-vz_green/20 border-vz_green/40 text-vz_green"
+                            : "bg-white/10 border-white/20 text-white/80 hover:bg-white/20"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+
+                  {editingId === t.id ? (
+                    <form
+                      onSubmit={submitTournamentEdit}
+                      className="grid w-full gap-2 md:grid-cols-2 lg:grid-cols-3 text-xs"
                     >
-                      {label}
+                      <label className="flex flex-col gap-1">
+                        <span className="text-white/70">Название</span>
+                        <input
+                          value={editName}
+                          onChange={(e) => setEditName(e.target.value)}
+                          required
+                          className="rounded-lg bg-black/30 border border-white/15 px-3 py-2 text-white text-sm focus:border-vz_green focus:outline-none"
+                        />
+                      </label>
+                      <label className="flex flex-col gap-1">
+                        <span className="text-white/70">Локация</span>
+                        <input
+                          value={editVenue}
+                          onChange={(e) => setEditVenue(e.target.value)}
+                          className="rounded-lg bg-black/30 border border-white/15 px-3 py-2 text-white text-sm focus:border-vz_green focus:outline-none"
+                          placeholder="Город, площадка"
+                        />
+                      </label>
+                      <label className="flex flex-col gap-1">
+                        <span className="text-white/70">Дата и время</span>
+                        <input
+                          value={editDateStart}
+                          onChange={(e) => setEditDateStart(e.target.value)}
+                          className="rounded-lg bg-black/30 border border-white/15 px-3 py-2 text-white text-sm focus:border-vz_green focus:outline-none"
+                          placeholder="Например: 12 октября 13:00"
+                        />
+                      </label>
+                      <div className="flex items-center gap-2 md:col-span-2 lg:col-span-3 justify-end">
+                        <button
+                          type="button"
+                          onClick={() => setEditingId(null)}
+                          className="rounded-lg border border-white/20 px-3 py-2 text-white/80 hover:border-white/40 transition"
+                        >
+                          Отмена
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={editLoading}
+                          className="rounded-lg bg-vz_green text-black font-semibold px-4 py-2 text-sm hover:brightness-110 disabled:opacity-60"
+                        >
+                          {editLoading ? "Сохраняем..." : "Сохранить"}
+                        </button>
+                      </div>
+                    </form>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => startEdit(t.id)}
+                      className="text-xs rounded-full border border-white/20 px-3 py-1 text-white/80 hover:border-white/40 transition"
+                    >
+                      Редактировать
                     </button>
-                  ))}
+                  )}
                 </div>
               </div>
             ))}
           </div>
         )}
       </div>
+
+      <div className="rounded-2xl border border-white/10 bg-white/5 p-5 space-y-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-xs uppercase tracking-[0.2em] text-white/60">Оплаты</p>
+            <h3 className="text-lg font-semibold">Отметить оплату команд</h3>
+            <p className="text-sm text-white/70">
+              Ставьте отметку об оплате взноса — статус подтянется в бот и на сайте.
+            </p>
+          </div>
+          <label className="flex flex-col gap-2 text-sm w-full md:w-64">
+            <span className="text-white/70">Турнир</span>
+            <select
+              value={paymentTournamentId}
+              onChange={(e) => setPaymentTournamentId(e.target.value)}
+              className="rounded-xl bg-black/30 border border-white/15 px-3 py-2 text-white text-sm focus:border-vz_green focus:outline-none"
+            >
+              <option value="" disabled>
+                Выберите турнир
+              </option>
+              {tournamentList.map((t) => (
+                <option key={t.id} value={t.id} className="bg-black">
+                  #{t.id} — {t.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        {paymentsError && (
+          <div className="rounded-xl border border-red-400/40 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+            {paymentsError}
+          </div>
+        )}
+
+        {paymentsLoading ? (
+          <p className="text-sm text-white/70">Загружаем команды...</p>
+        ) : payments.length === 0 ? (
+          <p className="text-sm text-white/70">Пока нет команд в этом турнире.</p>
+        ) : (
+          <div className="space-y-2">
+            {payments.map((team) => (
+              <div
+                key={team.name}
+                className="flex items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/30 px-3 py-2"
+              >
+                <div>
+                  <p className="text-sm font-semibold">{team.name}</p>
+                  <p
+                    className={`text-xs ${
+                      team.paid
+                        ? "text-vz_green"
+                        : "text-white/60"
+                    }`}
+                  >
+                    {team.paid ? "Оплата отмечена" : "Без оплаты"}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => updatePayment(team.name, !team.paid)}
+                  disabled={updatingTeam === team.name || paymentsLoading}
+                  className={`text-xs rounded-full border px-3 py-1 font-semibold transition ${
+                    team.paid
+                      ? "border-white/25 text-white/80 hover:border-red-300/60 hover:text-red-100"
+                      : "border-vz_green/60 text-vz_green hover:border-vz_green hover:bg-vz_green/10"
+                  } disabled:opacity-60`}
+                >
+                  {team.paid ? "Снять отметку" : "Отметить оплату"}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <form
+        onSubmit={submitMatch}
+        className="rounded-2xl border border-white/10 bg-white/5 p-5 space-y-4"
+      >
+        <div>
+          <p className="text-xs uppercase tracking-[0.2em] text-white/60">Админ</p>
+          <h3 className="text-lg font-semibold">Добавить матч и статистику</h3>
+          <p className="text-sm text-white/70">
+            Матч сразу попадает в таблицу бота вместе с очками игроков и обновляет
+            их суммарную статистику по турниру.
+          </p>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-2">
+          <label className="flex flex-col gap-2 text-sm">
+            <span className="text-white/70">Турнир</span>
+            <select
+              value={matchForm.tournamentId}
+              onChange={(e) => {
+                setMatchForm((prev) => ({
+                  ...prev,
+                  tournamentId: e.target.value,
+                  teamHomeId: "",
+                  teamAwayId: "",
+                }));
+                setPlayerStats([
+                  {
+                    userId: "",
+                    teamId: "",
+                    points: "",
+                    threes: "",
+                    assists: "",
+                    rebounds: "",
+                    steals: "",
+                    blocks: "",
+                    fouls: "",
+                    turnovers: "",
+                    minutes: "",
+                  },
+                ]);
+              }}
+              required
+              className="rounded-xl bg-black/30 border border-white/15 px-3 py-2 text-white text-sm focus:border-vz_green focus:outline-none"
+            >
+              <option value="" disabled>
+                Выберите турнир
+              </option>
+              {tournamentList.map((t) => (
+                <option key={t.id} value={t.id} className="bg-black">
+                  #{t.id} — {t.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="flex flex-col gap-2 text-sm">
+            <span className="text-white/70">Стадия/раунд</span>
+            <input
+              value={matchForm.stage}
+              onChange={(e) =>
+                setMatchForm((prev) => ({ ...prev, stage: e.target.value }))
+              }
+              className="rounded-xl bg-black/30 border border-white/15 px-3 py-2 text-white text-sm focus:border-vz_green focus:outline-none"
+              placeholder="Группа A, плей-офф, финал..."
+            />
+          </label>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-2">
+          <label className="flex flex-col gap-2 text-sm">
+            <span className="text-white/70">Домашняя команда</span>
+            <select
+              value={matchForm.teamHomeId}
+              onChange={(e) =>
+                setMatchForm((prev) => ({ ...prev, teamHomeId: e.target.value }))
+              }
+              required
+              className="rounded-xl bg-black/30 border border-white/15 px-3 py-2 text-white text-sm focus:border-vz_green focus:outline-none"
+            >
+              <option value="" className="bg-black" disabled>
+                Выберите команду
+              </option>
+              {teams.map((team) => (
+                <option key={team.id} value={team.id} className="bg-black">
+                  {team.name}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="flex flex-col gap-2 text-sm">
+            <span className="text-white/70">Гостевая команда</span>
+            <select
+              value={matchForm.teamAwayId}
+              onChange={(e) =>
+                setMatchForm((prev) => ({ ...prev, teamAwayId: e.target.value }))
+              }
+              required
+              className="rounded-xl bg-black/30 border border-white/15 px-3 py-2 text-white text-sm focus:border-vz_green focus:outline-none"
+            >
+              <option value="" className="bg-black" disabled>
+                Выберите команду
+              </option>
+              {teams.map((team) => (
+                <option key={team.id} value={team.id} className="bg-black">
+                  {team.name}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-3">
+          <label className="flex flex-col gap-2 text-sm">
+            <span className="text-white/70">Счёт хозяев</span>
+            <input
+              type="number"
+              value={matchForm.scoreHome}
+              onChange={(e) =>
+                setMatchForm((prev) => ({ ...prev, scoreHome: e.target.value }))
+              }
+              className="rounded-xl bg-black/30 border border-white/15 px-3 py-2 text-white text-sm focus:border-vz_green focus:outline-none"
+            />
+          </label>
+
+          <label className="flex flex-col gap-2 text-sm">
+            <span className="text-white/70">Счёт гостей</span>
+            <input
+              type="number"
+              value={matchForm.scoreAway}
+              onChange={(e) =>
+                setMatchForm((prev) => ({ ...prev, scoreAway: e.target.value }))
+              }
+              className="rounded-xl bg-black/30 border border-white/15 px-3 py-2 text-white text-sm focus:border-vz_green focus:outline-none"
+            />
+          </label>
+
+          <label className="flex flex-col gap-2 text-sm">
+            <span className="text-white/70">Статус</span>
+            <select
+              value={matchForm.status}
+              onChange={(e) =>
+                setMatchForm((prev) => ({ ...prev, status: e.target.value }))
+              }
+              className="rounded-xl bg-black/30 border border-white/15 px-3 py-2 text-white text-sm focus:border-vz_green focus:outline-none"
+            >
+              <option value="scheduled" className="bg-black">
+                Запланирован
+              </option>
+              <option value="running" className="bg-black">
+                Идёт матч
+              </option>
+              <option value="finished" className="bg-black">
+                Завершён
+              </option>
+            </select>
+          </label>
+        </div>
+
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="text-base font-semibold">Статистика игроков</h4>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={autofillRosters}
+                className="text-xs px-3 py-1 rounded-full border border-white/20 hover:border-vz_green hover:text-vz_green transition"
+              >
+                Автозаполнить состав
+              </button>
+              <button
+                type="button"
+                onClick={addPlayerRow}
+                className="text-xs px-3 py-1 rounded-full border border-white/20 hover:border-vz_green hover:text-vz_green transition"
+              >
+                + Добавить игрока
+              </button>
+            </div>
+          </div>
+
+          <p className="text-xs text-white/60">
+            Команды и ростеры подтягиваются из выбранного турнира. Можно
+            скорректировать статистику перед сохранением, не вводя ID вручную.
+          </p>
+          {teamsLoading && (
+            <p className="text-xs text-vz_green">Обновляем список команд и игроков...</p>
+          )}
+
+          <div className="space-y-2">
+            {playerStats.map((row, index) => (
+              <div
+                key={index}
+                className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-[1.1fr,1.3fr,repeat(5,minmax(88px,1fr))] items-end rounded-xl border border-white/10 bg-black/30 p-3"
+              >
+                <label className="flex flex-col gap-1 text-xs">
+                  <span className="text-white/60">Команда</span>
+                  <select
+                    value={row.teamId}
+                    onChange={(e) => updateStatField(index, "teamId", e.target.value)}
+                    className="rounded-lg bg-black/20 border border-white/15 px-2 py-1 text-white text-sm focus:border-vz_green focus:outline-none min-w-0"
+                  >
+                    <option value="" className="bg-black">
+                      Выберите команду
+                    </option>
+                    {teams.map((team) => (
+                      <option key={team.id} value={team.id} className="bg-black">
+                        {team.name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+
+                <label className="flex flex-col gap-1 text-xs">
+                  <span className="text-white/60">Игрок</span>
+                  <select
+                    value={row.userId}
+                    onChange={(e) => updateStatField(index, "userId", e.target.value)}
+                    className="rounded-lg bg-black/20 border border-white/15 px-2 py-1 text-white text-sm focus:border-vz_green focus:outline-none min-w-0"
+                  >
+                    <option value="" className="bg-black">
+                      Выберите игрока
+                    </option>
+                    {(teamRosters[Number(row.teamId)] || [])
+                      .filter((p) => p.userId)
+                      .map((player) => (
+                        <option
+                          key={`${row.teamId}-${player.userId}`}
+                          value={player.userId}
+                          className="bg-black"
+                        >
+                          {player.fullName || "Игрок"} (ID {player.userId})
+                        </option>
+                      ))}
+                  </select>
+                </label>
+
+                <label className="flex flex-col gap-1 text-xs">
+                  <span className="text-white/60">Очки</span>
+                  <input
+                    type="number"
+                    value={row.points}
+                    onChange={(e) => updateStatField(index, "points", e.target.value)}
+                    className="rounded-lg bg-black/20 border border-white/15 px-2 py-1 text-white text-sm focus:border-vz_green focus:outline-none min-w-0"
+                  />
+                </label>
+
+                <label className="flex flex-col gap-1 text-xs">
+                  <span className="text-white/60">3-очки</span>
+                  <input
+                    type="number"
+                    value={row.threes}
+                    onChange={(e) => updateStatField(index, "threes", e.target.value)}
+                    className="rounded-lg bg-black/20 border border-white/15 px-2 py-1 text-white text-sm focus:border-vz_green focus:outline-none min-w-0"
+                  />
+                </label>
+
+                <label className="flex flex-col gap-1 text-xs">
+                  <span className="text-white/60">Пасы</span>
+                  <input
+                    type="number"
+                    value={row.assists}
+                    onChange={(e) => updateStatField(index, "assists", e.target.value)}
+                    className="rounded-lg bg-black/20 border border-white/15 px-2 py-1 text-white text-sm focus:border-vz_green focus:outline-none min-w-0"
+                  />
+                </label>
+
+                <label className="flex flex-col gap-1 text-xs">
+                  <span className="text-white/60">Подборы</span>
+                  <input
+                    type="number"
+                    value={row.rebounds}
+                    onChange={(e) => updateStatField(index, "rebounds", e.target.value)}
+                    className="rounded-lg bg-black/20 border border-white/15 px-2 py-1 text-white text-sm focus:border-vz_green focus:outline-none min-w-0"
+                  />
+                </label>
+
+                <div className="flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => removePlayerRow(index)}
+                    className="text-[11px] px-2 py-1 rounded-lg border border-white/20 text-white/70 hover:border-red-400 hover:text-red-200 transition"
+                  >
+                    Удалить
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-2 md:col-span-3 xl:col-span-7">
+                  <label className="flex flex-col gap-1 text-xs">
+                    <span className="text-white/60">Перехваты</span>
+                    <input
+                      type="number"
+                      value={row.steals}
+                      onChange={(e) => updateStatField(index, "steals", e.target.value)}
+                      className="rounded-lg bg-black/20 border border-white/15 px-2 py-1 text-white text-sm focus:border-vz_green focus:outline-none min-w-0"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 text-xs">
+                    <span className="text-white/60">Блоки</span>
+                    <input
+                      type="number"
+                      value={row.blocks}
+                      onChange={(e) => updateStatField(index, "blocks", e.target.value)}
+                      className="rounded-lg bg-black/20 border border-white/15 px-2 py-1 text-white text-sm focus:border-vz_green focus:outline-none min-w-0"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 text-xs">
+                    <span className="text-white/60">Фолы</span>
+                    <input
+                      type="number"
+                      value={row.fouls}
+                      onChange={(e) => updateStatField(index, "fouls", e.target.value)}
+                      className="rounded-lg bg-black/20 border border-white/15 px-2 py-1 text-white text-sm focus:border-vz_green focus:outline-none min-w-0"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 text-xs">
+                    <span className="text-white/60">Потери</span>
+                    <input
+                      type="number"
+                      value={row.turnovers}
+                      onChange={(e) => updateStatField(index, "turnovers", e.target.value)}
+                      className="rounded-lg bg-black/20 border border-white/15 px-2 py-1 text-white text-sm focus:border-vz_green focus:outline-none min-w-0"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 text-xs">
+                    <span className="text-white/60">Минуты</span>
+                    <input
+                      type="number"
+                      value={row.minutes}
+                      onChange={(e) => updateStatField(index, "minutes", e.target.value)}
+                      className="rounded-lg bg-black/20 border border-white/15 px-2 py-1 text-white text-sm focus:border-vz_green focus:outline-none min-w-0"
+                    />
+                  </label>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <button
+          type="submit"
+          disabled={matchLoading}
+          className="inline-flex justify-center rounded-xl bg-vz_green text-black font-semibold px-4 py-2 text-sm hover:brightness-110 disabled:opacity-60"
+        >
+          {matchLoading ? "Сохраняем..." : "Сохранить матч"}
+        </button>
+      </form>
     </div>
   );
 }

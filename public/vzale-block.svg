@@ -1,0 +1,21 @@
+<svg width="1600" height="900" viewBox="0 0 1600 900" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
+  <title>VZALE стильный фон</title>
+  <desc>Фиолетовый градиент с неоновой надписью VZALE и зеленым рукописным штрихом.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#3f1b6b"/>
+      <stop offset="100%" stop-color="#9f84ff"/>
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="18" result="blur" />
+      <feMerge>
+        <feMergeNode in="blur" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bg)" />
+  <path d="M220 470 C360 350 540 520 720 380 C890 520 1100 320 1360 540" stroke="#9DFF4F" stroke-width="46" stroke-linecap="round" stroke-linejoin="round" opacity="0.78" filter="url(#glow)" />
+  <path d="M250 390 C420 320 560 520 760 360 C940 520 1150 330 1380 520" stroke="#9DFF4F" stroke-width="28" stroke-linecap="round" stroke-linejoin="round" opacity="0.9" />
+  <text x="800" y="430" text-anchor="middle" font-family="'Montserrat', 'Inter', 'Segoe UI', sans-serif" font-size="240" font-weight="800" fill="#0f0f0f" filter="url(#glow)">VZALE</text>
+</svg>

@@ -1,7 +1,17 @@
 import Link from "next/link";
-import { notFound } from "next/navigation";
 
 import { getDb } from "@/lib/db";
+import TournamentSelector from "./TournamentSelector";
+import { PaymentModal } from "@/components/PaymentModal";
+import { TournamentCountdown } from "@/components/Tournaments/TournamentCountdown";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+// План по улучшению страницы турнира:
+// 1) Расширить хедер: статус, дата/место, стоимость, CTA и таймер.
+// 2) Добавить обучающий блок «Как всё проходит» и FAQ.
+// 3) Усилить блок команд с краткой сводкой и адаптивной вёрсткой.
 
 type TournamentStatus =
   | "draft"
@@ -19,6 +29,53 @@ type TournamentRow = {
   dateStart: string | null;
   venue: string | null;
   settingsJson: string | null;
+};
+
+type MatchRow = {
+  id: number;
+  stage: string | null;
+  groupName: string | null;
+  startAt: string | null;
+  court: string | null;
+  teamHomeName: string;
+  teamAwayName: string;
+  scoreHome: number | null;
+  scoreAway: number | null;
+  status: string | null;
+};
+
+type TeamRow = {
+  id: number;
+  name: string;
+  paid: number;
+  registeredAt?: string | null;
+};
+
+type RosterRow = {
+  teamId: number;
+  teamName: string;
+  userId: number;
+  fullName: string | null;
+  isCaptain: number;
+};
+
+type TeamWithRoster = TeamRow & {
+  wins: number;
+  losses: number;
+  roster: RosterRow[];
+};
+
+type PlayerMatchRow = {
+  matchId: number;
+  userId: number;
+  fullName: string | null;
+  teamName: string;
+  points: number;
+  rebounds: number;
+  assists: number;
+  steals: number;
+  blocks: number;
+  threes: number;
 };
 
 const statusLabel: Record<TournamentStatus, string> = {
@@ -68,6 +125,13 @@ function fetchTournament(id: number): TournamentRow | undefined {
     .get(id) as TournamentRow | undefined;
 }
 
+function fetchTournamentList(): Pick<TournamentRow, "id" | "name">[] {
+  const db = getDb();
+  return db
+    .prepare("SELECT id, name FROM tournaments ORDER BY id DESC")
+    .all() as Pick<TournamentRow, "id" | "name">[];
+}
+
 function parseSettings(settingsJson: string | null) {
   if (!settingsJson) return null;
   try {
@@ -75,6 +139,13 @@ function parseSettings(settingsJson: string | null) {
       description?: string;
       format?: string;
       prizes?: string;
+      price?: string | number;
+      entryFee?: string | number;
+      fee?: string | number;
+      teamLimit?: number;
+      teamsLimit?: number;
+      maxTeams?: number;
+      registrationDeadline?: string;
     };
   } catch (err) {
     console.error("[tournament] failed to parse settings_json", err);
@@ -82,16 +153,320 @@ function parseSettings(settingsJson: string | null) {
   }
 }
 
+function getMatches(tournamentId: number): MatchRow[] {
+  const db = getDb();
+  return db
+    .prepare(
+      `
+        SELECT
+          ms.id,
+          COALESCE(m.stage, ms.stage) AS stage,
+          m.group_name AS groupName,
+          m.start_at AS startAt,
+          m.court,
+          ms.team_home_name AS teamHomeName,
+          ms.team_away_name AS teamAwayName,
+          ms.score_home AS scoreHome,
+          ms.score_away AS scoreAway,
+          COALESCE(m.status, ms.status) AS status
+        FROM matches_simple ms
+        LEFT JOIN matches m ON m.id = ms.id
+        WHERE ms.tournament_id = ?
+        ORDER BY COALESCE(m.start_at, ms.id) DESC
+      `
+    )
+    .all(tournamentId) as MatchRow[];
+}
+
+function getTeams(tournamentId: number): TeamWithRoster[] {
+  const db = getDb();
+
+  const paymentMap = new Map<string, number>();
+
+  const paidRows = db
+    .prepare(
+      `
+        SELECT name, paid
+        FROM tournament_team_names
+        WHERE tournament_id = ?
+      `,
+    )
+    .all(tournamentId) as { name: string; paid: number }[];
+
+  paidRows.forEach((row) => {
+    paymentMap.set(row.name, row.paid ?? 0);
+  });
+
+  let teams = db
+    .prepare(
+      `
+        SELECT tn.id, tn.name, 0 AS paid, tn.created_at AS registeredAt
+        FROM teams_new tn
+        WHERE tn.tournament_id = ?
+        ORDER BY tn.name ASC
+      `,
+    )
+    .all(tournamentId) as TeamRow[];
+
+  teams = teams.map((team) => ({
+    ...team,
+    paid: paymentMap.get(team.name) ?? team.paid ?? 0,
+  }));
+
+  let rosterRows: RosterRow[] = [];
+
+  if (teams.length > 0) {
+    const placeholders = teams.map(() => "?").join(",");
+    rosterRows = db
+      .prepare(
+        `
+          SELECT
+            tm.team_id AS teamId,
+            t.name AS teamName,
+            tm.user_id AS userId,
+            u.full_name AS fullName,
+            CASE WHEN tm.role = 'captain' THEN 1 ELSE 0 END AS isCaptain
+          FROM team_members tm
+          JOIN teams t ON t.id = tm.team_id
+          LEFT JOIN users u ON u.user_id = tm.user_id
+          WHERE tm.team_id IN (${placeholders})
+          ORDER BY isCaptain DESC, fullName ASC
+        `,
+      )
+      .all(...teams.map((t) => t.id)) as RosterRow[];
+  }
+
+  // Фоллбэк для старых турниров, если нет записей в связке tournament_teams
+  if (teams.length === 0) {
+    const legacyTeams = db
+      .prepare(
+        `
+          SELECT name, paid, id as teamId, registered_at as registeredAt
+          FROM tournament_team_names
+          WHERE tournament_id = ?
+          ORDER BY paid DESC, name ASC
+        `,
+      )
+      .all(tournamentId) as (TeamRow & { teamId?: number })[];
+
+    const rosterTeams = db
+      .prepare(
+        `
+          SELECT DISTINCT team_name AS name, 0 AS paid, NULL as registeredAt
+          FROM tournament_roster
+          WHERE tournament_id = ?
+          ORDER BY name ASC
+        `,
+      )
+      .all(tournamentId) as TeamRow[];
+
+    const matchTeams = db
+      .prepare(
+        `
+          SELECT DISTINCT team_home_name AS name, 0 AS paid, NULL as registeredAt
+          FROM matches_simple
+          WHERE tournament_id = ?
+          UNION
+          SELECT DISTINCT team_away_name AS name, 0 AS paid, NULL as registeredAt
+          FROM matches_simple
+          WHERE tournament_id = ?
+        `,
+      )
+      .all(tournamentId, tournamentId) as TeamRow[];
+
+    const merged = new Map<string, TeamRow>();
+    [...legacyTeams, ...rosterTeams, ...matchTeams].forEach((team) => {
+      if (team.name) merged.set(team.name, team);
+    });
+    const fallbackTeams = Array.from(merged.values())
+      .map((team) => ({
+        ...team,
+        paid: paymentMap.get(team.name) ?? team.paid ?? 0,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+
+    teams.push(...fallbackTeams.map((t, idx) => ({ ...t, id: t.id ?? idx + 1 })));
+
+    rosterRows = db
+      .prepare(
+        `
+          SELECT
+            0 as teamId,
+            team_name AS teamName,
+            user_id AS userId,
+            full_name AS fullName,
+            is_captain AS isCaptain
+          FROM tournament_roster
+          WHERE tournament_id = ?
+          ORDER BY is_captain DESC, full_name ASC
+        `,
+      )
+      .all(tournamentId) as RosterRow[];
+
+    if (rosterRows.length === 0 && teams.length > 0) {
+      rosterRows = db
+        .prepare(
+          `
+            SELECT
+              0 as teamId,
+              team_name AS teamName,
+              member_id AS userId,
+              member_name AS fullName,
+              0 AS isCaptain
+            FROM teams
+            WHERE team_name IN (
+              SELECT DISTINCT team_name FROM teams
+            )
+            ORDER BY team_name ASC, member_name ASC
+          `,
+        )
+        .all() as RosterRow[];
+    }
+  }
+
+  const rosterMap = new Map<number, RosterRow[]>();
+  for (const row of rosterRows) {
+    const key = row.teamId || teams.find((t) => t.name === row.teamName)?.id;
+    if (!key) continue;
+    const bucket = rosterMap.get(key) || [];
+    bucket.push(row);
+    rosterMap.set(key, bucket);
+  }
+
+  // Собираем статистику побед/поражений из matches_simple, опираясь на названия команд
+  const matchStats = db
+    .prepare(
+      `
+        SELECT team_home_name AS home, team_away_name AS away, score_home AS sh, score_away AS sa
+        FROM matches_simple
+        WHERE tournament_id = ?
+      `,
+    )
+    .all(tournamentId) as { home: string; away: string; sh: number | null; sa: number | null }[];
+
+  const record = new Map<string, { wins: number; losses: number }>();
+  for (const { home, away, sh, sa } of matchStats) {
+    const homeRec = record.get(home) || { wins: 0, losses: 0 };
+    const awayRec = record.get(away) || { wins: 0, losses: 0 };
+
+    if (sh != null && sa != null) {
+      if (sh > sa) {
+        homeRec.wins += 1;
+        awayRec.losses += 1;
+      } else if (sa > sh) {
+        awayRec.wins += 1;
+        homeRec.losses += 1;
+      }
+    }
+
+    record.set(home, homeRec);
+    record.set(away, awayRec);
+  }
+
+  return teams.map((team) => ({
+    ...team,
+    wins: record.get(team.name)?.wins ?? 0,
+    losses: record.get(team.name)?.losses ?? 0,
+    roster: rosterMap.get(team.id) ?? [],
+  }));
+}
+
+function getPlayerStatsMap(tournamentId: number) {
+  const db = getDb();
+  const rows = db
+    .prepare(
+      `
+        SELECT
+          pms.match_id AS matchId,
+          pms.user_id AS userId,
+          u.full_name AS fullName,
+          pms.team_name AS teamName,
+          pms.points,
+          pms.rebounds,
+          pms.assists,
+          pms.steals,
+          pms.blocks,
+          pms.threes
+        FROM player_match_stats pms
+        LEFT JOIN users u ON u.user_id = pms.user_id
+        WHERE pms.tournament_id = ?
+        ORDER BY pms.points DESC
+      `
+    )
+    .all(tournamentId) as PlayerMatchRow[];
+
+  const map = new Map<number, PlayerMatchRow[]>();
+  for (const row of rows) {
+    const bucket = map.get(row.matchId) || [];
+    bucket.push(row);
+    map.set(row.matchId, bucket);
+  }
+  return map;
+}
+
 export default function TournamentPage({ params }: { params: { id: string } }) {
-  const id = Number(params.id);
-  if (Number.isNaN(id)) return notFound();
+  const allTournaments = fetchTournamentList();
+  const paramId = Number.parseInt(params.id, 10);
+  const selectedId =
+    Number.isNaN(paramId) || paramId === 0
+      ? allTournaments[0]?.id
+      : paramId;
 
-  const row = fetchTournament(id);
-  if (!row) return notFound();
+  if (!selectedId) {
+    return (
+      <main className="min-h-screen w-full bg-gradient-to-b from-[#0B0615] via-[#050309] to-black text-white py-16 md:py-20 px-6 md:px-10">
+        <div className="max-w-4xl mx-auto">
+          <header className="space-y-3 text-center">
+            <h1 className="text-3xl md:text-4xl font-extrabold">Турниры VZALE</h1>
+            <p className="text-sm md:text-base text-white/70">
+              Турниры пока не созданы. Как только бот или админка добавят первый турнир, его можно будет выбрать в списке.
+            </p>
+            <Link
+              href="/tournaments"
+              className="inline-flex items-center gap-2 justify-center text-sm text-white/70 hover:text-white"
+            >
+              ← Ко всем турнирам
+            </Link>
+          </header>
+        </div>
+      </main>
+    );
+  }
 
-  const status = normalizeStatus(row.status) ?? "draft";
-  const settings = parseSettings(row.settingsJson);
+  const row = fetchTournament(selectedId);
+  const selectedFromList = allTournaments.find((t) => t.id === selectedId);
+  const selectorOptions = selectedFromList
+    ? allTournaments
+    : [{ id: selectedId, name: `Турнир #${selectedId}` }, ...allTournaments];
+
+  const matches = getMatches(selectedId);
+  const teams = getTeams(selectedId);
+  const hasAnyData = !!row || teams.length > 0 || matches.length > 0;
+
+  // Если записи турнира нет (например, в базе сохранились только матчи/составы),
+  // всё равно показываем страницу по id и рендерим команды/матчи из БД.
+  // 404 отдаём только если совсем нет данных.
+  const showEmptyState = !hasAnyData;
+
+  const status = normalizeStatus(row?.status ?? null) ?? "draft";
+  const settings = row ? parseSettings(row.settingsJson) : null;
   const canRegister = status === "registration_open";
+  const playerStatsMap = getPlayerStatsMap(selectedId);
+  const teamLimit = settings?.teamLimit || settings?.teamsLimit || settings?.maxTeams || null;
+  const price = settings?.price ?? settings?.entryFee ?? settings?.fee ?? null;
+  const countdownTarget = settings?.registrationDeadline || row?.dateStart;
+
+  function matchStatusBadge(value: string | null) {
+    switch (value) {
+      case "finished":
+        return "bg-white/10 border-white/20 text-white/70";
+      case "running":
+        return "bg-vz_green/20 border-vz_green/40 text-vz_green";
+      case "scheduled":
+      default:
+        return "bg-vz_purple/15 border-vz_purple/30 text-vz_purple";
+    }
+  }
 
   return (
     <main className="min-h-screen w-full bg-gradient-to-b from-[#0B0615] via-[#050309] to-black text-white py-16 md:py-20 px-6 md:px-10">
@@ -104,22 +479,88 @@ export default function TournamentPage({ params }: { params: { id: string } }) {
       <div className="relative max-w-6xl mx-auto space-y-10">
         {/* Хедер турнира */}
         <header className="space-y-4">
-          <p className="text-xs md:text-sm uppercase tracking-[0.22em] text-white/70">
-            Турнир VZALE #{row.id}
-          </p>
-          <h1 className="text-3xl md:text-4xl font-extrabold">{row.name}</h1>
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="space-y-2">
+              <p className="text-xs md:text-sm uppercase tracking-[0.22em] text-white/70">
+                Турнир VZALE #{row?.id ?? selectedId}
+              </p>
+              <h1 className="text-3xl md:text-4xl font-extrabold">
+                {row?.name ?? selectedFromList?.name ?? `Турнир #${selectedId}`}
+              </h1>
+            </div>
 
-          <div className="flex flex-wrap items-center gap-3 text-sm md:text-base text-white/80">
-            {row.dateStart && <span>{row.dateStart}</span>}
-            {row.dateStart && row.venue && <span className="text-white/60">•</span>}
-            {row.venue && <span>{row.venue}</span>}
+            <TournamentSelector
+              tournaments={selectorOptions}
+              selectedId={selectedId}
+            />
           </div>
 
-          <span
-            className={`inline-flex items-center px-4 py-1 rounded-full border bg-white/5 text-xs md:text-sm font-semibold ${statusColor[status]}`}
-          >
-            {statusLabel[status]}
-          </span>
+          <div className="grid gap-4 md:grid-cols-[2fr,1.1fr] md:items-center">
+            <div className="space-y-3 rounded-3xl border border-white/10 bg-white/5 p-4 md:p-6 shadow-[0_20px_60px_rgba(0,0,0,0.35)]">
+              <div className="flex flex-wrap items-center gap-2 text-sm md:text-base text-white/80">
+                {row?.dateStart && <span>{row.dateStart}</span>}
+                {row?.dateStart && row?.venue && <span className="text-white/60">•</span>}
+                {row?.venue && <span>{row.venue}</span>}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2 text-xs md:text-sm text-white/80">
+                <span
+                  className={`inline-flex items-center px-4 py-1 rounded-full border bg-white/5 font-semibold uppercase tracking-wide ${statusColor[status]}`}
+                >
+                  {statusLabel[status]}
+                </span>
+                {price ? (
+                  <span className="inline-flex items-center px-3 py-1 rounded-full border border-white/10 bg-white/5">
+                    Взнос: <span className="ml-1 font-semibold text-white">{price}</span>
+                  </span>
+                ) : null}
+                {teamLimit ? (
+                  <span className="inline-flex items-center px-3 py-1 rounded-full border border-white/10 bg-white/5">
+                    Команды: {teams.length} / {teamLimit}
+                  </span>
+                ) : teams.length ? (
+                  <span className="inline-flex items-center px-3 py-1 rounded-full border border-white/10 bg-white/5">
+                    Уже зарегистрировано: {teams.length}
+                  </span>
+                ) : null}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <Link
+                  href={canRegister ? "/participate" : `/tournaments/${selectedId}`}
+                  className={`inline-flex items-center justify-center px-5 py-3 rounded-xl text-sm md:text-base font-semibold transition ${
+                    canRegister
+                      ? "bg-vz_green text-black shadow-[0_0_30px_rgba(164,255,79,0.5)] hover:brightness-110"
+                      : "bg-white/10 border border-white/20 text-white hover:bg-white/15"
+                  }`}
+                >
+                  {canRegister ? "Участвовать" : "Подробнее"}
+                </Link>
+                <Link
+                  href="/participate"
+                  className="inline-flex items-center justify-center px-5 py-3 rounded-xl border border-white/15 bg-white/5 text-sm md:text-base font-semibold text-white hover:bg-white/10 transition"
+                >
+                  Войти через Telegram, чтобы участвовать
+                </Link>
+              </div>
+            </div>
+
+            {countdownTarget ? (
+              <div className="flex md:justify-end">
+                <TournamentCountdown target={countdownTarget} />
+              </div>
+            ) : null}
+          </div>
+
+          {showEmptyState ? (
+            <div className="mt-4 rounded-2xl border border-white/15 bg-white/5 p-4 text-sm text-white/75">
+              <p className="font-semibold text-white">Данные пока не загружены</p>
+              <p className="mt-1 text-white/70">
+                Мы не нашли запись турнира или связанные матчи и команды. Ссылка останется
+                доступной, как только бот или админка добавят информацию в базу.
+              </p>
+            </div>
+          ) : null}
         </header>
 
         {/* Основной блок */}
@@ -177,6 +618,248 @@ export default function TournamentPage({ params }: { params: { id: string } }) {
               <p>После подачи заявку можно отследить и обновить в личном кабинете или в Telegram.</p>
             </div>
           </aside>
+        </section>
+
+        {/* Как всё проходит */}
+        <section className="rounded-3xl bg-white/5 border border-white/10 p-6 md:p-7 shadow-[0_20px_60px_rgba(0,0,0,0.6)] space-y-4">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-[0.2em] text-white/60">Как всё проходит</p>
+              <h2 className="text-xl md:text-2xl font-semibold">4 шага до игры</h2>
+            </div>
+            <span className="text-xs text-white/60">Регистрация и оплата остаются в текущем потоке VZALE</span>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-4">
+            {["Регистрируешься на сайте или через бота", "Оплачиваешь участие", "Получаешь подтверждение и расписание", "Приходишь и играешь 3×3"].map(
+              (step, idx) => (
+                <div
+                  key={step}
+                  className="rounded-2xl border border-white/10 bg-black/20 p-4 flex flex-col gap-2"
+                >
+                  <span className="text-xs text-white/60">Шаг {idx + 1}</span>
+                  <p className="text-sm md:text-base text-white">{step}</p>
+                </div>
+              )
+            )}
+          </div>
+        </section>
+
+        <section className="rounded-3xl bg-white/5 border border-white/10 p-6 md:p-7 shadow-[0_20px_60px_rgba(0,0,0,0.6)] space-y-4">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-[0.2em] text-white/60">Кто уже в игре</p>
+              <h2 className="text-xl md:text-2xl font-semibold">Команды турнира</h2>
+            </div>
+            <span className="text-xs text-white/60">
+              {teams.length > 0
+                ? `${teams.length} команд(ы) в списке`
+                : "Пока ни одна команда не добавлена"}
+            </span>
+          </div>
+
+          {teams.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-white/15 bg-black/20 p-5 text-sm text-white/70">
+              Как только капитаны подадут заявки, здесь появится таблица команд и их составов.
+            </div>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 auto-rows-fr">
+              {teams.map((team) => (
+                <div
+                  key={team.id}
+                  className="w-full max-w-full rounded-2xl border border-white/10 bg-black/25 p-4 md:p-5 space-y-3 overflow-hidden"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <h3 className="text-lg font-semibold leading-tight">{team.name}</h3>
+                      <p className="text-[11px] text-white/60">
+                        {team.wins + team.losses === 0
+                          ? "Ещё нет сыгранных матчей"
+                          : `${team.wins}-${team.losses} (W-L)`}
+                      </p>
+                      <p className="text-[11px] text-white/60">
+                        Игроков в составе: {team.roster.length || "—"}
+                      </p>
+                    </div>
+                    <span
+                      className={`inline-flex items-center px-3 py-1 rounded-full text-[11px] font-semibold ${team.paid ? "bg-vz_green/80 text-black" : "bg-white/10 text-white/70"}`}
+                    >
+                      {team.paid ? "Взнос оплачен" : "Без оплаты"}
+                    </span>
+                  </div>
+
+                  <div className="space-y-2 text-xs text-white/80">
+                    {team.roster.length === 0 ? (
+                      <p className="text-white/60">Состав пока не указан.</p>
+                    ) : (
+                      team.roster.map((player) => (
+                        <div
+                          key={`${team.name}-${player.userId}`}
+                          className="flex items-center justify-between rounded-xl border border-white/5 bg-white/5 px-3 py-2"
+                        >
+                          <div className="flex flex-col">
+                            <span className="font-semibold">{player.fullName || `Игрок ${player.userId}`}</span>
+                            <span className="text-[11px] text-white/60">
+                              {player.isCaptain ? "Капитан" : "Игрок"}
+                            </span>
+                          </div>
+                          <span className="text-[11px] text-white/60">ID: {player.userId}</span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {!team.paid && (
+                    <div className="pt-2">
+                      <PaymentModal
+                        triggerText="Оплатить взнос"
+                        variant="ghost"
+                        className="w-full justify-center"
+                      />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="rounded-3xl bg-white/5 border border-white/10 p-6 md:p-7 shadow-[0_20px_60px_rgba(0,0,0,0.6)] space-y-4">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-[0.2em] text-white/60">Результаты</p>
+              <h2 className="text-xl md:text-2xl font-semibold">Матчи турнира</h2>
+            </div>
+            <span className="text-xs text-white/60">
+              {matches.length > 0
+                ? `${matches.length} матч(ей) из базы`
+                : "Пока нет сыгранных или запланированных матчей"}
+            </span>
+          </div>
+
+          {matches.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-white/15 bg-black/20 p-5 text-sm text-white/70">
+              Как только появятся расписание или результаты, здесь отобразятся
+              команды, счёт и лучшие игроки.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {matches.map((match) => (
+                <div
+                  key={match.id}
+                  className="rounded-2xl border border-white/10 bg-black/30 p-4 md:p-5 space-y-3"
+                >
+                  <div className="flex flex-wrap items-center gap-3 justify-between">
+                    <div className="flex flex-col gap-1">
+                      <p className="text-xs text-white/60">
+                        {match.stage || "Матч"}
+                        {match.groupName ? ` • ${match.groupName}` : ""}
+                      </p>
+                      {(match.startAt || match.court) && (
+                        <p className="text-[11px] text-white/50">
+                          {match.startAt ? `Начало: ${match.startAt}` : ""}
+                          {match.startAt && match.court ? " • " : ""}
+                          {match.court ? `Площадка: ${match.court}` : ""}
+                        </p>
+                      )}
+                      <div className="flex items-center gap-3 text-lg md:text-xl font-semibold">
+                        <span>{match.teamHomeName}</span>
+                        <span className="text-white/60">vs</span>
+                        <span>{match.teamAwayName}</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="text-2xl md:text-3xl font-extrabold">
+                        {match.scoreHome ?? "-"} : {match.scoreAway ?? "-"}
+                      </span>
+                      <span
+                        className={`text-xs px-3 py-1 rounded-full border ${matchStatusBadge(match.status)}`}
+                      >
+                        {match.status === "finished"
+                          ? "Завершён"
+                          : match.status === "running"
+                            ? "Идёт"
+                            : "Запланирован"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {playerStatsMap.get(match.id)?.length ? (
+                    <div className="grid md:grid-cols-2 gap-3">
+                      {playerStatsMap
+                        .get(match.id)!
+                        .slice(0, 6)
+                        .map((player) => (
+                          <div
+                            key={`${match.id}-${player.userId}`}
+                            className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm"
+                          >
+                            <div className="flex flex-col">
+                              <span className="font-semibold">
+                                {player.fullName || `Игрок ${player.userId}`}
+                              </span>
+                              <span className="text-[11px] text-white/60">{player.teamName}</span>
+                            </div>
+                            <div className="flex items-center gap-3 text-xs text-white/80">
+                              <span className="font-semibold text-vz_green">{player.points} оч.</span>
+                              <span>{player.rebounds} подб.</span>
+                              <span>{player.assists} пас.</span>
+                              {player.threes ? <span>{player.threes} 3-оч.</span> : null}
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-white/60">
+                      Подробная статистика игроков для этого матча ещё не внесена.
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+        )}
+      </section>
+
+        {/* FAQ */}
+        <section className="rounded-3xl bg-white/5 border border-white/10 p-6 md:p-7 shadow-[0_20px_60px_rgba(0,0,0,0.6)] space-y-4">
+          <div className="space-y-1">
+            <p className="text-xs uppercase tracking-[0.2em] text-white/60">FAQ</p>
+            <h2 className="text-xl md:text-2xl font-semibold">Частые вопросы</h2>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            {[
+              {
+                q: "Нужно ли быть профессионалом?",
+                a: "Нет, турнир любительский. Главное — любить баскетбол и следовать регламенту.",
+              },
+              {
+                q: "Можно ли зарегистрироваться одному?",
+                a: "Да, мы помогаем собрать команды из соло-игроков, если это допускает регламент турнира.",
+              },
+              {
+                q: "Можно ли вернуть взнос?",
+                a: "Уточняйте условия возврата у организаторов. Мы стараемся идти навстречу, если это возможно по срокам.",
+              },
+              {
+                q: "Нужна ли медсправка?",
+                a: "Смотрите актуальные требования в описании турнира и в официальных каналах VZALE.",
+              },
+              {
+                q: "Как узнать расписание?",
+                a: "После подтверждения участия расписание приходит в боте и появляется в карточке турнира.",
+              },
+              {
+                q: "Что если нет команды?",
+                a: "Подайте заявку как свободный игрок — мы постараемся подобрать вам команду при наличии слотов.",
+              },
+            ].map((item) => (
+              <div key={item.q} className="rounded-2xl border border-white/10 bg-black/20 p-4 space-y-1">
+                <p className="text-sm font-semibold text-white">{item.q}</p>
+                <p className="text-xs md:text-sm text-white/75 leading-relaxed">{item.a}</p>
+              </div>
+            ))}
+          </div>
         </section>
 
         <Link
