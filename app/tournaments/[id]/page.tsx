@@ -187,11 +187,10 @@ function getTeams(tournamentId: number): TeamWithRoster[] {
   let teams = db
     .prepare(
       `
-        SELECT t.id, t.name, 0 AS paid, tt.registered_at AS registeredAt
-        FROM tournament_teams tt
-        JOIN teams t ON t.id = tt.team_id
-        WHERE tt.tournament_id = ?
-        ORDER BY t.name ASC
+        SELECT tn.id, tn.name, 0 AS paid, tn.created_at AS registeredAt
+        FROM teams_new tn
+        WHERE tn.tournament_id = ?
+        ORDER BY tn.name ASC
       `,
     )
     .all(tournamentId) as TeamRow[];
