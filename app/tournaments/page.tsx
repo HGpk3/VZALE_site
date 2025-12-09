@@ -1,12 +1,42 @@
+import Link from "next/link";
+
 import TournamentCard from "../components/Tournaments/TournamentCard";
 
-const mockTournaments = [
+type TournamentStatus =
+  | "draft"
+  | "announced"
+  | "registration_open"
+  | "closed"
+  | "running"
+  | "finished"
+  | "archived";
+
+type Tournament = {
+  id: number;
+  title: string;
+  date: string;
+  place: string;
+  status: TournamentStatus;
+  type: string;
+};
+
+const statusPriority: Record<TournamentStatus, number> = {
+  registration_open: 0,
+  announced: 1,
+  running: 2,
+  finished: 3,
+  closed: 4,
+  draft: 5,
+  archived: 6,
+}; 
+
+const mockTournaments: Tournament[] = [
   {
     id: 1,
     title: "VZALE STREET OPEN",
     date: "27 апреля · 13:00",
     place: "Санкт-Петербург, площадка VZALE",
-    status: "upcoming" as const,
+    status: "registration_open",
     type: "Любительский 3×3 · до 12 команд",
   },
   {
@@ -14,7 +44,7 @@ const mockTournaments = [
     title: "VZALE NIGHT RUN",
     date: "15 июня · 18:00",
     place: "Санкт-Петербург, outdoor площадка",
-    status: "upcoming" as const,
+    status: "announced",
     type: "Вечерний турнир · музыка · медиа",
   },
   {
@@ -22,10 +52,32 @@ const mockTournaments = [
     title: "VZALE SEASON FINALS",
     date: "Состоялся: 5 марта",
     place: "Санкт-Петербург",
-    status: "finished" as const,
+    status: "finished",
     type: "Финальный турнир сезона",
   },
 ];
+
+function normalizeStatus(status: string | null): TournamentStatus | null {
+  if (!status) return null;
+  if (
+    [
+      "draft",
+      "announced",
+      "registration_open",
+      "closed",
+      "running",
+      "finished",
+      "archived",
+    ].includes(status)
+  ) {
+    return status as TournamentStatus;
+  }
+  return null;
+}
+
+function fetchTournaments(): Tournament[] {
+  return mockTournaments;
+}
 
 export default function TournamentsPage() {
   const tournaments = fetchTournaments().sort((a, b) => {
@@ -62,7 +114,7 @@ export default function TournamentsPage() {
         </header>
 
         <section className="grid gap-6 md:grid-cols-2">
-          {mockTournaments.map((t) => (
+          {tournaments.map((t) => (
             <TournamentCard
               key={t.id}
               id={t.id}
@@ -70,7 +122,6 @@ export default function TournamentsPage() {
               date={t.date}
               place={t.place}
               status={t.status}
-              type={t.type}
             />
           ))}
         </section>
