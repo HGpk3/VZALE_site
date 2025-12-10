@@ -50,7 +50,7 @@ export default function LebronWatcher() {
               <span className="inline-block h-2 w-2 rounded-full bg-vz_green animate-pulse"></span>
               Курсовой взгляд активен
             </div>
-            <h2 className="text-3xl sm:text-4xl font-black leading-tight">Леброн Джейсон следит за курсором</h2>
+            <h2 className="text-3xl sm:text-4xl font-black leading-tight">Настоящий Леброн следит за курсором</h2>
             <p className="text-base sm:text-lg text-black/80 max-w-2xl">
               Наведи мышку на экран — и икона площадки мягко повернётся вслед. Глаза и голова отслеживают твои движения, создавая эффект живого персонажа в стиле VZALE.
             </p>
@@ -58,6 +58,7 @@ export default function LebronWatcher() {
               <span className="rounded-full bg-vz_purple/15 px-4 py-2 text-vz_purple">Интерактив</span>
               <span className="rounded-full bg-vz_green/20 px-4 py-2 text-black">Новый герой</span>
               <span className="rounded-full bg-black/80 px-4 py-2 text-white">Mouse tracking</span>
+              <span className="rounded-full bg-gradient-to-r from-[#552583] to-[#FDB927] px-4 py-2 text-white">King vibe</span>
             </div>
           </div>
 
@@ -71,19 +72,22 @@ export default function LebronWatcher() {
 
             <div
               style={headShift}
-              className="relative flex h-72 w-64 flex-col items-center transition-transform duration-150 ease-out"
+              className="relative flex h-80 w-72 flex-col items-center transition-transform duration-150 ease-out"
             >
-              <div className="relative h-48 w-48 rounded-[42%] bg-gradient-to-br from-[#5C3BFF] via-[#2E1F60] to-[#120C2A] shadow-[0_25px_55px_rgba(0,0,0,0.45)] border-4 border-[#1A123B]">
-                <div className="absolute inset-x-6 top-8 h-6 rounded-full bg-gradient-to-r from-vz_green to-[#d8ff9c] shadow-[0_4px_12px_rgba(0,0,0,0.25)]"></div>
-                <div className="absolute inset-x-10 top-16 flex justify-between gap-6">
-                  <div className="relative h-10 w-12 rounded-[24px] bg-white shadow-inner shadow-black/30">
+              <div className="relative h-52 w-48 rounded-[48%] bg-gradient-to-b from-[#7c431d] via-[#603018] to-[#3a1d10] shadow-[0_25px_55px_rgba(0,0,0,0.45)] border-4 border-[#2a180c]">
+                <div className="absolute -left-4 top-24 h-10 w-6 rounded-full bg-gradient-to-b from-[#7c431d] to-[#4a2b15] shadow-[inset_0_6px_10px_rgba(0,0,0,0.35)]"></div>
+                <div className="absolute -right-4 top-24 h-10 w-6 rounded-full bg-gradient-to-b from-[#7c431d] to-[#4a2b15] shadow-[inset_0_6px_10px_rgba(0,0,0,0.35)]"></div>
+                <div className="absolute inset-x-8 top-6 h-6 rounded-full bg-gradient-to-r from-[#FDB927] via-white/90 to-[#FDB927] shadow-[0_4px_14px_rgba(0,0,0,0.45)]"></div>
+                <div className="absolute inset-x-8 top-8 h-3 rounded-full bg-[#552583]/80 shadow-[0_2px_8px_rgba(0,0,0,0.35)]"></div>
+                <div className="absolute inset-x-10 top-[60px] flex justify-between gap-6">
+                  <div className="relative h-10 w-12 rounded-[24px] bg-[#F9EBD7] shadow-inner shadow-black/30">
                     <div
                       style={pupilShift}
                       className="absolute left-1/2 top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full bg-black shadow-[0_0_0_3px_rgba(0,0,0,0.05)]"
                     ></div>
                     <div className="absolute left-1/3 top-1/3 h-1.5 w-1.5 rounded-full bg-white/90"></div>
                   </div>
-                  <div className="relative h-10 w-12 rounded-[24px] bg-white shadow-inner shadow-black/30">
+                  <div className="relative h-10 w-12 rounded-[24px] bg-[#F9EBD7] shadow-inner shadow-black/30">
                     <div
                       style={pupilShift}
                       className="absolute left-1/2 top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full bg-black shadow-[0_0_0_3px_rgba(0,0,0,0.05)]"
@@ -94,12 +98,13 @@ export default function LebronWatcher() {
 
                 <div className="absolute inset-x-14 top-28 h-3 rounded-full bg-black/70 blur-[0.5px]"></div>
 
-                <div className="absolute inset-x-12 top-32 h-20 rounded-b-[36px] bg-gradient-to-b from-[#3B2B7A] to-[#1B123E] shadow-inner shadow-black/30"></div>
-                <div className="absolute inset-x-16 top-[158px] h-6 rounded-full bg-gradient-to-r from-[#FBB040] to-[#FF5C5C] shadow-[0_8px_20px_rgba(0,0,0,0.3)]"></div>
+                <div className="absolute inset-x-12 top-32 h-[72px] rounded-b-[32px] bg-gradient-to-b from-[#2d170c] via-[#1c0f07] to-[#100803] shadow-inner shadow-black/40"></div>
+                <div className="absolute inset-x-12 top-[135px] h-16 rounded-b-[32px] bg-gradient-to-b from-[#4e2d18] via-[#3a1d10] to-[#2a150c] opacity-90"></div>
+                <div className="absolute inset-x-14 top-[172px] h-5 rounded-full bg-gradient-to-r from-[#e6b889] via-[#f2d2aa] to-[#e6b889] shadow-[0_6px_14px_rgba(0,0,0,0.35)]"></div>
               </div>
 
-              <div className="mt-4 flex w-48 items-center justify-center rounded-2xl bg-gradient-to-r from-[#FF8D23] to-[#FF3C6F] px-6 py-3 text-center text-white shadow-[0_14px_35px_rgba(0,0,0,0.35)]">
-                <div className="text-lg font-black tracking-widest drop-shadow-[0_4px_12px_rgba(0,0,0,0.35)]">JASON 23</div>
+              <div className="-mt-2 flex w-56 items-center justify-center rounded-2xl bg-gradient-to-r from-[#552583] via-[#FDB927] to-[#552583] px-6 py-3 text-center text-white shadow-[0_14px_35px_rgba(0,0,0,0.35)] border border-white/20">
+                <div className="text-lg font-black tracking-[0.35em] drop-shadow-[0_4px_12px_rgba(0,0,0,0.35)]">LEBRON 23</div>
               </div>
             </div>
           </div>
