@@ -80,6 +80,8 @@ export default function LebronWatcher() {
                 <div className="absolute inset-x-8 top-6 h-6 rounded-full bg-gradient-to-r from-[#FDB927] via-white/90 to-[#FDB927] shadow-[0_4px_14px_rgba(0,0,0,0.45)]"></div>
                 <div className="absolute inset-x-8 top-8 h-3 rounded-full bg-[#552583]/80 shadow-[0_2px_8px_rgba(0,0,0,0.35)]"></div>
                 <div className="absolute inset-x-14 top-16 h-1 rounded-full bg-black/70 opacity-70"></div>
+                <div className="absolute inset-x-12 top-10 h-[18px] rounded-full bg-gradient-to-r from-transparent via-white/12 to-transparent"></div>
+                <div className="absolute inset-x-10 top-12 h-[26px] rounded-full bg-gradient-to-r from-transparent via-black/15 to-transparent opacity-60 blur-[0.5px]"></div>
                 <div className="absolute inset-x-10 top-[60px] flex justify-between gap-6">
                   <div className="relative h-10 w-12 rounded-[24px] bg-[#F9EBD7] shadow-inner shadow-black/30">
                     <div
@@ -98,9 +100,29 @@ export default function LebronWatcher() {
                 </div>
 
                 <div className="absolute inset-x-14 top-28 h-3 rounded-full bg-black/70 blur-[0.5px]"></div>
-                <div className="absolute inset-x-12 top-32 h-[72px] rounded-b-[32px] bg-gradient-to-b from-[#2d170c] via-[#1c0f07] to-[#100803] shadow-inner shadow-black/40"></div>
-                <div className="absolute inset-x-12 top-[135px] h-16 rounded-b-[32px] bg-gradient-to-b from-[#4e2d18] via-[#3a1d10] to-[#2a150c] opacity-90"></div>
+                <div className="absolute inset-x-12 top-30 h-3 rounded-full bg-gradient-to-r from-[#2a160b]/0 via-[#2a160b]/25 to-transparent"></div>
+                <div className="absolute inset-x-12 top-32 h-[72px] rounded-b-[32px] bg-gradient-to-b from-[#2d170c] via-[#1c0f07] to-[#100803] shadow-inner shadow-black/40">
+                  <div className="absolute inset-x-6 top-10 h-8 rounded-full bg-gradient-to-r from-[#412313]/40 via-transparent to-[#412313]/40 opacity-90"></div>
+                  <div className="absolute inset-x-[34px] top-7 h-5 rounded-full bg-gradient-to-b from-[#f3d7b1]/50 to-transparent"></div>
+                </div>
+                <div className="absolute inset-x-12 top-[135px] h-16 rounded-b-[32px] bg-gradient-to-b from-[#4e2d18] via-[#3a1d10] to-[#2a150c] opacity-90">
+                  <div className="absolute inset-x-4 bottom-2 h-2 rounded-full bg-black/20"></div>
+                </div>
                 <div className="absolute inset-x-14 top-[172px] h-5 rounded-full bg-gradient-to-r from-[#e6b889] via-[#f2d2aa] to-[#e6b889] shadow-[0_6px_14px_rgba(0,0,0,0.35)]"></div>
+                <div className="absolute inset-x-20 top-[116px] flex justify-between text-[10px] font-black tracking-[0.2em] text-white/60">
+                  <span className="drop-shadow-[0_2px_6px_rgba(0,0,0,0.45)]">KING</span>
+                  <span className="drop-shadow-[0_2px_6px_rgba(0,0,0,0.45)]">AKRON</span>
+                </div>
+                <div className="absolute inset-x-[46px] top-[154px] h-7 rounded-full bg-gradient-to-r from-[#1c0f07]/85 via-[#2c160c]/60 to-[#1c0f07]/85 shadow-[0_6px_10px_rgba(0,0,0,0.35)]"></div>
+                <div className="absolute inset-x-[38px] top-[128px] flex justify-between">
+                  <div className="h-8 w-6 rounded-full bg-[#2a180c] shadow-[inset_0_6px_10px_rgba(0,0,0,0.4)]"></div>
+                  <div className="h-8 w-6 rounded-full bg-[#2a180c] shadow-[inset_0_6px_10px_rgba(0,0,0,0.4)]"></div>
+                </div>
+                <div className="absolute inset-x-[36px] top-[138px] flex justify-center gap-3 text-[9px] uppercase tracking-[0.1em] text-white/50">
+                  <span className="rounded-full bg-white/5 px-2 py-[2px] shadow-[0_2px_6px_rgba(0,0,0,0.35)]">MVP</span>
+                  <span className="rounded-full bg-white/5 px-2 py-[2px] shadow-[0_2px_6px_rgba(0,0,0,0.35)]">Finals</span>
+                  <span className="rounded-full bg-white/5 px-2 py-[2px] shadow-[0_2px_6px_rgba(0,0,0,0.35)]">GOAT?</span>
+                </div>
               </div>
 
               <div className="relative -mt-1 flex w-56 items-center justify-center rounded-2xl bg-gradient-to-r from-[#552583] via-[#FDB927] to-[#552583] px-6 py-3 text-center text-white shadow-[0_14px_35px_rgba(0,0,0,0.35)] border border-white/20">
@@ -115,11 +137,21 @@ export default function LebronWatcher() {
                   <div className="absolute left-4 top-8 h-16 w-14 rounded-[18px] bg-gradient-to-b from-[#7c431d] via-[#603018] to-[#3a1d10] shadow-[inset_0_8px_12px_rgba(0,0,0,0.35)] rotate-[-4deg]"></div>
                   <div className="absolute right-4 top-8 h-16 w-14 rounded-[18px] bg-gradient-to-b from-[#7c431d] via-[#603018] to-[#3a1d10] shadow-[inset_0_8px_12px_rgba(0,0,0,0.35)] rotate-[4deg]"></div>
                   <div className="absolute inset-x-12 bottom-4 h-10 rounded-[16px] bg-gradient-to-r from-[#FDB927] via-[#f9d67c] to-[#FDB927] shadow-[0_10px_24px_rgba(0,0,0,0.3)]"></div>
+                  <div className="absolute inset-x-8 bottom-6 h-4 rounded-full bg-gradient-to-r from-white/20 via-transparent to-white/20"></div>
+                  <div className="absolute inset-x-16 top-6 h-3 rounded-full bg-gradient-to-r from-[#FDB927]/30 via-white/35 to-[#FDB927]/30"></div>
+                  <div className="absolute inset-x-10 top-12 h-1 rounded-full bg-white/20"></div>
+                  <div className="absolute inset-x-6 bottom-3 flex justify-between text-[10px] font-semibold uppercase tracking-[0.18em] text-white/65">
+                    <span className="drop-shadow-[0_2px_6px_rgba(0,0,0,0.35)]">LAL</span>
+                    <span className="drop-shadow-[0_2px_6px_rgba(0,0,0,0.35)]">17x</span>
+                    <span className="drop-shadow-[0_2px_6px_rgba(0,0,0,0.35)]">Champ</span>
+                  </div>
                 </div>
                 <div className="relative h-16 w-48 rounded-[22px] bg-gradient-to-b from-[#1a1040] via-[#0f0a26] to-[#0b071d] shadow-[0_16px_28px_rgba(0,0,0,0.45)]">
                   <div className="absolute inset-x-12 top-4 h-3 rounded-full bg-white/12"></div>
                   <div className="absolute left-6 top-1/2 h-10 w-4 -translate-y-1/2 rounded-full bg-[#FDB927]/80"></div>
                   <div className="absolute right-6 top-1/2 h-10 w-4 -translate-y-1/2 rounded-full bg-[#FDB927]/80"></div>
+                  <div className="absolute inset-x-10 top-2 h-[2px] rounded-full bg-gradient-to-r from-[#FDB927]/40 via-white/30 to-[#FDB927]/40"></div>
+                  <div className="absolute inset-x-14 bottom-2 h-2 rounded-full bg-[#FDB927]/25"></div>
                 </div>
               </div>
             </div>
