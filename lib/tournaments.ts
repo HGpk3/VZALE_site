@@ -1,5 +1,12 @@
 import { getDb } from "./db";
 
+export type TournamentSettings = {
+  format?: string | null;
+  price?: string | number | null;
+  teamLimit?: number | null;
+  description?: string | null;
+};
+
 export type TournamentRow = {
   id: number;
   name: string;
@@ -7,7 +14,31 @@ export type TournamentRow = {
   dateStart: string | null;
   venue: string | null;
   settingsJson?: string | null;
+  settings?: TournamentSettings | null;
 };
+
+type TournamentCardRow = {
+  id: number;
+  name: string;
+  status: string | null;
+  dateStart: string | null;
+  venue: string | null;
+  settingsJson: string | null;
+  teamCount: number;
+};
+
+export function parseTournamentSettings(
+  settingsJson: string | null | undefined,
+): TournamentSettings | null {
+  if (!settingsJson) return null;
+  try {
+    const parsed = JSON.parse(settingsJson) as TournamentSettings;
+    return parsed;
+  } catch (err) {
+    console.warn("[tournaments] Failed to parse settings_json", err);
+    return null;
+  }
+}
 
 export type TeamMemberRow = {
   userId: number;
@@ -22,7 +53,43 @@ export function fetchAllTournaments(): TournamentRow[] {
     .prepare(
       "SELECT id, name, status, date_start as dateStart, venue, settings_json as settingsJson FROM tournaments ORDER BY id DESC"
     )
-    .all() as TournamentRow[];
+    .all()
+    .map((row) => ({
+      ...(row as TournamentRow),
+      settings: parseTournamentSettings((row as TournamentRow).settingsJson),
+    }));
+}
+
+export function fetchTournamentCards(): (TournamentCardRow & {
+  settings: TournamentSettings | null;
+})[] {
+  const db = getDb();
+  const rows = db
+    .prepare(
+      `
+      SELECT
+        t.id,
+        t.name,
+        t.status,
+        t.date_start as dateStart,
+        t.venue,
+        t.settings_json as settingsJson,
+        COALESCE(tc.teamCount, 0) as teamCount
+      FROM tournaments t
+      LEFT JOIN (
+        SELECT tournament_id, COUNT(*) as teamCount
+        FROM teams_new
+        GROUP BY tournament_id
+      ) tc ON tc.tournament_id = t.id
+      ORDER BY t.id DESC
+    `,
+    )
+    .all() as TournamentCardRow[];
+
+  return rows.map((row) => ({
+    ...row,
+    settings: parseTournamentSettings(row.settingsJson),
+  }));
 }
 
 export function fetchOpenTournaments(): TournamentRow[] {

@@ -1,36 +1,96 @@
+import Link from "next/link";
 import TournamentCard from "../components/Tournaments/TournamentCard";
+import {
+  TournamentSettings,
+  fetchTournamentCards,
+} from "@/lib/tournaments";
 
-const mockTournaments = [
+type TournamentStatus =
+  | "draft"
+  | "announced"
+  | "registration_open"
+  | "closed"
+  | "running"
+  | "finished"
+  | "archived";
+
+type Tournament = {
+  id: number;
+  title: string;
+  date?: string | null;
+  place?: string | null;
+  status: TournamentStatus | null;
+  format?: string | null;
+  teamCount?: number;
+  teamLimit?: number | null;
+  price?: string | number | null;
+  settings?: TournamentSettings | null;
+};
+
+const statusPriority: Record<TournamentStatus, number> = {
+  running: 0,
+  registration_open: 1,
+  announced: 2,
+  draft: 3,
+  finished: 4,
+  closed: 5,
+  archived: 6,
+};
+
+const legacyTournaments: Tournament[] = [
   {
     id: 1,
     title: "VZALE STREET OPEN",
     date: "27 апреля · 13:00",
     place: "Санкт-Петербург, площадка VZALE",
-    status: "upcoming" as const,
-    type: "Любительский 3×3 · до 12 команд",
+    status: "registration_open",
+    format: "Любительский 3×3 · до 12 команд",
+    teamCount: 8,
+    teamLimit: 12,
+    price: "2000 ₽ с команды",
   },
   {
     id: 2,
     title: "VZALE NIGHT RUN",
     date: "15 июня · 18:00",
     place: "Санкт-Петербург, outdoor площадка",
-    status: "upcoming" as const,
-    type: "Вечерний турнир · музыка · медиа",
+    status: "announced",
+    format: "Вечерний турнир · музыка · медиа",
+    price: "Вход свободный",
   },
   {
     id: 3,
     title: "VZALE SEASON FINALS",
     date: "Состоялся: 5 марта",
     place: "Санкт-Петербург",
-    status: "finished" as const,
-    type: "Финальный турнир сезона",
+    status: "finished",
+    format: "Финальный турнир сезона",
+    teamCount: 16,
+    teamLimit: 16,
   },
 ];
 
+function normalizeStatus(status: TournamentStatus | null): TournamentStatus {
+  return status ?? "draft";
+}
+
 export default function TournamentsPage() {
-  const tournaments = fetchTournaments().sort((a, b) => {
-    const aStatus = normalizeStatus(a.status) ?? "draft";
-    const bStatus = normalizeStatus(b.status) ?? "draft";
+  const dbTournaments = fetchTournamentCards().map((t) => ({
+    id: t.id,
+    title: t.name,
+    date: t.dateStart,
+    place: t.venue,
+    status: t.status as TournamentStatus,
+    format: t.settings?.format || null,
+    teamCount: t.teamCount,
+    teamLimit: t.settings?.teamLimit ?? null,
+    price: t.settings?.price ?? null,
+    settings: t.settings,
+  }));
+
+  const tournaments = [...dbTournaments, ...legacyTournaments].sort((a, b) => {
+    const aStatus = normalizeStatus(a.status);
+    const bStatus = normalizeStatus(b.status);
     const aPriority = statusPriority[aStatus] ?? 99;
     const bPriority = statusPriority[bStatus] ?? 99;
     if (aPriority === bPriority) return b.id - a.id;
@@ -62,7 +122,7 @@ export default function TournamentsPage() {
         </header>
 
         <section className="grid gap-6 md:grid-cols-2">
-          {mockTournaments.map((t) => (
+          {tournaments.map((t) => (
             <TournamentCard
               key={t.id}
               id={t.id}
@@ -70,7 +130,10 @@ export default function TournamentsPage() {
               date={t.date}
               place={t.place}
               status={t.status}
-              type={t.type}
+              teamCount={t.teamCount}
+              teamLimit={t.teamLimit}
+              price={t.price}
+              format={t.format || undefined}
             />
           ))}
         </section>

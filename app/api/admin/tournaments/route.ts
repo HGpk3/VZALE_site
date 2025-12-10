@@ -1,6 +1,41 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/db";
 import { isAdmin } from "@/lib/admin";
+import { parseTournamentSettings, TournamentSettings } from "@/lib/tournaments";
+
+function collectSettingsFromBody(
+  body: Record<string, unknown>,
+  base?: TournamentSettings | null,
+): { settings: TournamentSettings | null; touched: boolean } {
+  const settings: TournamentSettings = { ...(base || {}) };
+  let touched = false;
+
+  if (Object.prototype.hasOwnProperty.call(body, "format")) {
+    settings.format = (body?.format as string | undefined)?.trim() || null;
+    touched = true;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, "price")) {
+    const priceValue = body?.price as string | number | undefined;
+    settings.price =
+      priceValue === undefined || priceValue === null || priceValue === ""
+        ? null
+        : priceValue;
+    touched = true;
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, "teamLimit")) {
+    const limitRaw = body?.teamLimit as string | number | null | undefined;
+    const limitNumber =
+      limitRaw === null || limitRaw === "" || limitRaw === undefined
+        ? null
+        : Number(limitRaw);
+    settings.teamLimit = Number.isFinite(limitNumber) ? limitNumber : null;
+    touched = true;
+  }
+
+  return { settings: touched ? settings : base || null, touched };
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -17,6 +52,7 @@ export async function POST(req: NextRequest) {
     const venue = (body?.venue as string | undefined)?.trim();
     const dateStart = (body?.dateStart as string | undefined)?.trim();
     const status = (body?.status as string | undefined)?.trim() || "registration_open";
+    const { settings, touched } = collectSettingsFromBody(body);
 
     if (!name) {
       return NextResponse.json(
@@ -27,9 +63,15 @@ export async function POST(req: NextRequest) {
 
     const db = getDb();
     const stmt = db.prepare(
-      "INSERT INTO tournaments (name, date_start, venue, status) VALUES (?, ?, ?, ?)"
+      "INSERT INTO tournaments (name, date_start, venue, status, settings_json) VALUES (?, ?, ?, ?, ?)"
     );
-    const result = stmt.run(name, dateStart || null, venue || null, status);
+    const result = stmt.run(
+      name,
+      dateStart || null,
+      venue || null,
+      status,
+      touched && settings ? JSON.stringify(settings) : null,
+    );
 
     return NextResponse.json({ ok: true, id: Number(result.lastInsertRowid) });
   } catch (err) {
@@ -85,22 +127,32 @@ export async function PATCH(req: NextRequest) {
       updates.push({ column: "date_start", value: dateStart.trim() || null });
     }
 
-    if (updates.length === 0) {
-      return NextResponse.json(
-        { ok: false, error: "Нет данных для обновления" },
-        { status: 400 }
-      );
-    }
-
     const db = getDb();
     const exists = db
-      .prepare("SELECT id FROM tournaments WHERE id = ?")
-      .get(tournamentId) as { id: number } | undefined;
+      .prepare("SELECT id, settings_json as settingsJson FROM tournaments WHERE id = ?")
+      .get(tournamentId) as { id: number; settingsJson: string | null } | undefined;
 
     if (!exists) {
       return NextResponse.json(
         { ok: false, error: "Турнир не найден" },
         { status: 404 }
+      );
+    }
+
+    const { settings: mergedSettings, touched: settingsTouched } =
+      collectSettingsFromBody(body, parseTournamentSettings(exists.settingsJson));
+
+    if (settingsTouched) {
+      updates.push({
+        column: "settings_json",
+        value: mergedSettings ? JSON.stringify(mergedSettings) : null,
+      });
+    }
+
+    if (updates.length === 0) {
+      return NextResponse.json(
+        { ok: false, error: "Нет данных для обновления" },
+        { status: 400 }
       );
     }
 
