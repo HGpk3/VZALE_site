@@ -4,6 +4,7 @@ import UpcomingTournament from "./components/UpcomingTournament/UpcomingTourname
 import Features from "./components/Features/Features";
 import TeamsAndPlayers from "./components/Teams/TeamsAndPlayers";
 import Footer from "./components/Footer/Footer";
+import LebronWatcher from "./components/Lebron/LebronWatcher";
 
 export default function Home({
   searchParams,
@@ -16,6 +17,7 @@ export default function Home({
       <About />
       <UpcomingTournament />
       <Features />
+      <LebronWatcher />
       <TeamsAndPlayers searchParams={searchParams} />
       <Footer />
     </main>
