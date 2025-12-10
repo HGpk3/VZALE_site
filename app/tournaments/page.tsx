@@ -88,7 +88,11 @@ export default function TournamentsPage() {
     settings: t.settings,
   }));
 
-  const tournaments = [...dbTournaments, ...legacyTournaments].sort((a, b) => {
+  const tournamentsSource = dbTournaments.length
+    ? dbTournaments
+    : legacyTournaments;
+
+  const tournaments = [...tournamentsSource].sort((a, b) => {
     const aStatus = normalizeStatus(a.status);
     const bStatus = normalizeStatus(b.status);
     const aPriority = statusPriority[aStatus] ?? 99;
