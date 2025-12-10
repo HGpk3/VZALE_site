@@ -1,15 +1,11 @@
 import Link from "next/link";
 
 import TournamentCard from "../components/Tournaments/TournamentCard";
-
-type TournamentStatus =
-  | "draft"
-  | "announced"
-  | "registration_open"
-  | "closed"
-  | "running"
-  | "finished"
-  | "archived";
+import {
+  TournamentStatus,
+  normalizeStatus,
+  statusPriority,
+} from "./constant/statuses";
 
 type Tournament = {
   id: number;
@@ -19,16 +15,6 @@ type Tournament = {
   status: TournamentStatus;
   type: string;
 };
-
-const statusPriority: Record<TournamentStatus, number> = {
-  registration_open: 0,
-  announced: 1,
-  running: 2,
-  finished: 3,
-  closed: 4,
-  draft: 5,
-  archived: 6,
-}; 
 
 const mockTournaments: Tournament[] = [
   {
@@ -56,24 +42,6 @@ const mockTournaments: Tournament[] = [
     type: "Финальный турнир сезона",
   },
 ];
-
-function normalizeStatus(status: string | null): TournamentStatus | null {
-  if (!status) return null;
-  if (
-    [
-      "draft",
-      "announced",
-      "registration_open",
-      "closed",
-      "running",
-      "finished",
-      "archived",
-    ].includes(status)
-  ) {
-    return status as TournamentStatus;
-  }
-  return null;
-}
 
 function fetchTournaments(): Tournament[] {
   return mockTournaments;

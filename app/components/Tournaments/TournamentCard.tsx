@@ -1,18 +1,11 @@
 import Link from "next/link";
 
+import { TournamentStatus } from "@/app/tournaments/constant/statuses";
+
 // План по улучшению карточки:
 // 1) Отображать расширенную информацию (дата, площадка, стоимость).
 // 2) Добавить прогресс по командам с индикацией свободных мест.
 // 3) Сохранить существующий стиль и адаптивность.
-
-type TournamentStatus =
-  | "draft"
-  | "announced"
-  | "registration_open"
-  | "closed"
-  | "running"
-  | "finished"
-  | "archived";
 
 interface TournamentCardProps {
   id: number | string;

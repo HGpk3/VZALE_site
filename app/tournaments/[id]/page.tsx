@@ -4,6 +4,7 @@ import { getDb } from "@/lib/db";
 import TournamentSelector from "./TournamentSelector";
 import { PaymentModal } from "@/components/PaymentModal";
 import { TournamentCountdown } from "@/components/Tournaments/TournamentCountdown";
+import { TournamentStatus, normalizeStatus } from "../constant/statuses";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -12,15 +13,6 @@ export const revalidate = 0;
 // 1) Расширить хедер: статус, дата/место, стоимость, CTA и таймер.
 // 2) Добавить обучающий блок «Как всё проходит» и FAQ.
 // 3) Усилить блок команд с краткой сводкой и адаптивной вёрсткой.
-
-type TournamentStatus =
-  | "draft"
-  | "announced"
-  | "registration_open"
-  | "closed"
-  | "running"
-  | "finished"
-  | "archived";
 
 type TournamentRow = {
   id: number;
@@ -97,24 +89,6 @@ const statusColor: Record<TournamentStatus, string> = {
   finished: "border-white/30 text-white/80",
   archived: "border-white/20 text-white/70",
 };
-
-function normalizeStatus(status: string | null): TournamentStatus | null {
-  if (!status) return null;
-  if (
-    [
-      "draft",
-      "announced",
-      "registration_open",
-      "closed",
-      "running",
-      "finished",
-      "archived",
-    ].includes(status)
-  ) {
-    return status as TournamentStatus;
-  }
-  return null;
-}
 
 function fetchTournament(id: number): TournamentRow | undefined {
   const db = getDb();
