@@ -50,9 +50,9 @@ export default function LebronWatcher() {
               <span className="inline-block h-2 w-2 rounded-full bg-vz_green animate-pulse"></span>
               Курсовой взгляд активен
             </div>
-            <h2 className="text-3xl sm:text-4xl font-black leading-tight">Настоящий Леброн следит за курсором</h2>
+            <h2 className="text-3xl sm:text-4xl font-black leading-tight">Стилизованный Леброн следит за курсором</h2>
             <p className="text-base sm:text-lg text-black/80 max-w-2xl">
-              Наведи мышку на экран — и икона площадки мягко повернётся вслед. Глаза и голова отслеживают твои движения, создавая эффект живого персонажа в стиле VZALE.
+              Наведи мышку на экран — и король паркета мягко повернётся вслед. Глаза и голова отслеживают твои движения, сохраняя узнаваемые черты без стремления к фотографичной копии.
             </p>
             <div className="flex flex-wrap gap-3 text-sm font-semibold">
               <span className="rounded-full bg-vz_purple/15 px-4 py-2 text-vz_purple">Интерактив</span>
@@ -72,13 +72,14 @@ export default function LebronWatcher() {
 
             <div
               style={headShift}
-              className="relative flex h-80 w-72 flex-col items-center transition-transform duration-150 ease-out"
+              className="relative flex h-[28rem] w-72 flex-col items-center transition-transform duration-150 ease-out"
             >
               <div className="relative h-52 w-48 rounded-[48%] bg-gradient-to-b from-[#7c431d] via-[#603018] to-[#3a1d10] shadow-[0_25px_55px_rgba(0,0,0,0.45)] border-4 border-[#2a180c]">
                 <div className="absolute -left-4 top-24 h-10 w-6 rounded-full bg-gradient-to-b from-[#7c431d] to-[#4a2b15] shadow-[inset_0_6px_10px_rgba(0,0,0,0.35)]"></div>
                 <div className="absolute -right-4 top-24 h-10 w-6 rounded-full bg-gradient-to-b from-[#7c431d] to-[#4a2b15] shadow-[inset_0_6px_10px_rgba(0,0,0,0.35)]"></div>
                 <div className="absolute inset-x-8 top-6 h-6 rounded-full bg-gradient-to-r from-[#FDB927] via-white/90 to-[#FDB927] shadow-[0_4px_14px_rgba(0,0,0,0.45)]"></div>
                 <div className="absolute inset-x-8 top-8 h-3 rounded-full bg-[#552583]/80 shadow-[0_2px_8px_rgba(0,0,0,0.35)]"></div>
+                <div className="absolute inset-x-14 top-16 h-1 rounded-full bg-black/70 opacity-70"></div>
                 <div className="absolute inset-x-10 top-[60px] flex justify-between gap-6">
                   <div className="relative h-10 w-12 rounded-[24px] bg-[#F9EBD7] shadow-inner shadow-black/30">
                     <div
@@ -97,14 +98,29 @@ export default function LebronWatcher() {
                 </div>
 
                 <div className="absolute inset-x-14 top-28 h-3 rounded-full bg-black/70 blur-[0.5px]"></div>
-
                 <div className="absolute inset-x-12 top-32 h-[72px] rounded-b-[32px] bg-gradient-to-b from-[#2d170c] via-[#1c0f07] to-[#100803] shadow-inner shadow-black/40"></div>
                 <div className="absolute inset-x-12 top-[135px] h-16 rounded-b-[32px] bg-gradient-to-b from-[#4e2d18] via-[#3a1d10] to-[#2a150c] opacity-90"></div>
                 <div className="absolute inset-x-14 top-[172px] h-5 rounded-full bg-gradient-to-r from-[#e6b889] via-[#f2d2aa] to-[#e6b889] shadow-[0_6px_14px_rgba(0,0,0,0.35)]"></div>
               </div>
 
-              <div className="-mt-2 flex w-56 items-center justify-center rounded-2xl bg-gradient-to-r from-[#552583] via-[#FDB927] to-[#552583] px-6 py-3 text-center text-white shadow-[0_14px_35px_rgba(0,0,0,0.35)] border border-white/20">
+              <div className="relative -mt-1 flex w-56 items-center justify-center rounded-2xl bg-gradient-to-r from-[#552583] via-[#FDB927] to-[#552583] px-6 py-3 text-center text-white shadow-[0_14px_35px_rgba(0,0,0,0.35)] border border-white/20">
+                <div className="absolute -left-9 -top-2 h-16 w-10 rounded-[18px] bg-gradient-to-b from-[#7c431d] via-[#603018] to-[#3a1d10] shadow-[inset_0_8px_12px_rgba(0,0,0,0.35)] rotate-[-10deg]"></div>
+                <div className="absolute -right-9 -top-2 h-16 w-10 rounded-[18px] bg-gradient-to-b from-[#7c431d] via-[#603018] to-[#3a1d10] shadow-[inset_0_8px_12px_rgba(0,0,0,0.35)] rotate-[10deg]"></div>
                 <div className="text-lg font-black tracking-[0.35em] drop-shadow-[0_4px_12px_rgba(0,0,0,0.35)]">LEBRON 23</div>
+              </div>
+
+              <div className="relative mt-4 flex w-64 flex-col items-center gap-3">
+                <div className="relative h-28 w-full rounded-[28px] bg-gradient-to-b from-[#4c2e82] via-[#552583] to-[#3c1f68] shadow-[0_22px_40px_rgba(0,0,0,0.35)] border border-white/10">
+                  <div className="absolute inset-x-6 top-2 h-5 rounded-full bg-white/10"></div>
+                  <div className="absolute left-4 top-8 h-16 w-14 rounded-[18px] bg-gradient-to-b from-[#7c431d] via-[#603018] to-[#3a1d10] shadow-[inset_0_8px_12px_rgba(0,0,0,0.35)] rotate-[-4deg]"></div>
+                  <div className="absolute right-4 top-8 h-16 w-14 rounded-[18px] bg-gradient-to-b from-[#7c431d] via-[#603018] to-[#3a1d10] shadow-[inset_0_8px_12px_rgba(0,0,0,0.35)] rotate-[4deg]"></div>
+                  <div className="absolute inset-x-12 bottom-4 h-10 rounded-[16px] bg-gradient-to-r from-[#FDB927] via-[#f9d67c] to-[#FDB927] shadow-[0_10px_24px_rgba(0,0,0,0.3)]"></div>
+                </div>
+                <div className="relative h-16 w-48 rounded-[22px] bg-gradient-to-b from-[#1a1040] via-[#0f0a26] to-[#0b071d] shadow-[0_16px_28px_rgba(0,0,0,0.45)]">
+                  <div className="absolute inset-x-12 top-4 h-3 rounded-full bg-white/12"></div>
+                  <div className="absolute left-6 top-1/2 h-10 w-4 -translate-y-1/2 rounded-full bg-[#FDB927]/80"></div>
+                  <div className="absolute right-6 top-1/2 h-10 w-4 -translate-y-1/2 rounded-full bg-[#FDB927]/80"></div>
+                </div>
               </div>
             </div>
           </div>
