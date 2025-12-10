@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import type { TournamentSettings } from "@/lib/tournaments";
 
 export type TournamentOption = {
   id: number;
@@ -8,6 +9,10 @@ export type TournamentOption = {
   dateStart: string | null;
   venue: string | null;
   status?: string;
+  format?: string | null;
+  price?: string | number | null;
+  teamLimit?: number | null;
+  settings?: TournamentSettings | null;
 };
 
 interface Props {

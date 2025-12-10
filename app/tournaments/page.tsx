@@ -1,5 +1,9 @@
 import Link from "next/link";
 import TournamentCard from "../components/Tournaments/TournamentCard";
+import {
+  TournamentSettings,
+  fetchTournamentCards,
+} from "@/lib/tournaments";
 
 type TournamentStatus =
   | "draft"
@@ -16,10 +20,11 @@ type Tournament = {
   date?: string | null;
   place?: string | null;
   status: TournamentStatus | null;
-  format?: string;
+  format?: string | null;
   teamCount?: number;
   teamLimit?: number | null;
   price?: string | number | null;
+  settings?: TournamentSettings | null;
 };
 
 const statusPriority: Record<TournamentStatus, number> = {
@@ -32,7 +37,7 @@ const statusPriority: Record<TournamentStatus, number> = {
   archived: 6,
 };
 
-const mockTournaments: Tournament[] = [
+const legacyTournaments: Tournament[] = [
   {
     id: 1,
     title: "VZALE STREET OPEN",
@@ -70,7 +75,24 @@ function normalizeStatus(status: TournamentStatus | null): TournamentStatus {
 }
 
 export default function TournamentsPage() {
-  const tournaments = [...mockTournaments].sort((a, b) => {
+  const dbTournaments = fetchTournamentCards().map((t) => ({
+    id: t.id,
+    title: t.name,
+    date: t.dateStart,
+    place: t.venue,
+    status: t.status as TournamentStatus,
+    format: t.settings?.format || null,
+    teamCount: t.teamCount,
+    teamLimit: t.settings?.teamLimit ?? null,
+    price: t.settings?.price ?? null,
+    settings: t.settings,
+  }));
+
+  const tournamentsSource = dbTournaments.length
+    ? dbTournaments
+    : legacyTournaments;
+
+  const tournaments = [...tournamentsSource].sort((a, b) => {
     const aStatus = normalizeStatus(a.status);
     const bStatus = normalizeStatus(b.status);
     const aPriority = statusPriority[aStatus] ?? 99;
@@ -115,7 +137,7 @@ export default function TournamentsPage() {
               teamCount={t.teamCount}
               teamLimit={t.teamLimit}
               price={t.price}
-              format={t.format}
+              format={t.format || undefined}
             />
           ))}
         </section>

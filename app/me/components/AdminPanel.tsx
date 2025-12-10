@@ -53,6 +53,9 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
   const [name, setName] = useState("");
   const [venue, setVenue] = useState("");
   const [dateStart, setDateStart] = useState("");
+  const [format, setFormat] = useState("");
+  const [price, setPrice] = useState("");
+  const [teamLimit, setTeamLimit] = useState("");
   const [status, setStatus] = useState("registration_open");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -64,6 +67,9 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
   const [editName, setEditName] = useState("");
   const [editVenue, setEditVenue] = useState("");
   const [editDateStart, setEditDateStart] = useState("");
+  const [editFormat, setEditFormat] = useState("");
+  const [editPrice, setEditPrice] = useState("");
+  const [editTeamLimit, setEditTeamLimit] = useState("");
   const [matchForm, setMatchForm] = useState({
     tournamentId: tournamentList[0]?.id?.toString() || "",
     stage: "",
@@ -303,7 +309,15 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
       const res = await fetch("/api/admin/tournaments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, venue, dateStart, status }),
+        body: JSON.stringify({
+          name,
+          venue,
+          dateStart,
+          status,
+          format,
+          price,
+          teamLimit: teamLimit ? Number(teamLimit) : null,
+        }),
       });
       const data = await res.json();
       if (!res.ok || !data?.ok) {
@@ -313,6 +327,9 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
       setName("");
       setVenue("");
       setDateStart("");
+      setFormat("");
+      setPrice("");
+      setTeamLimit("");
       setStatus("registration_open");
       setTournamentList((prev) => [
         {
@@ -321,6 +338,9 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
           venue,
           dateStart,
           status,
+          format,
+          price,
+          teamLimit: teamLimit ? Number(teamLimit) : null,
         },
         ...prev,
       ]);
@@ -417,6 +437,11 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
     setEditName(current.name || "");
     setEditVenue(current.venue || "");
     setEditDateStart(current.dateStart || "");
+    setEditFormat(current.format || "");
+    setEditPrice((current.price ?? "").toString());
+    setEditTeamLimit(
+      typeof current.teamLimit === "number" ? current.teamLimit.toString() : "",
+    );
     setMessage(null);
     setError(null);
   }
@@ -436,6 +461,9 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
           name: editName,
           venue: editVenue,
           dateStart: editDateStart,
+          format: editFormat,
+          price: editPrice,
+          teamLimit: editTeamLimit ? Number(editTeamLimit) : null,
         }),
       });
       const data = await res.json();
@@ -451,6 +479,9 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
                 name: editName,
                 venue: editVenue || null,
                 dateStart: editDateStart || null,
+                format: editFormat,
+                price: editPrice,
+                teamLimit: editTeamLimit ? Number(editTeamLimit) : null,
               }
             : t
         )
@@ -461,6 +492,9 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
       setEditName("");
       setEditVenue("");
       setEditDateStart("");
+      setEditFormat("");
+      setEditPrice("");
+      setEditTeamLimit("");
     } catch (err) {
       if (err instanceof Error) {
         setError(err.message);
@@ -656,6 +690,40 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
           />
         </label>
 
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+          <label className="flex flex-col gap-2 text-sm">
+            <span className="text-white/70">Формат</span>
+            <input
+              value={format}
+              onChange={(e) => setFormat(e.target.value)}
+              className="rounded-xl bg-black/30 border border-white/15 px-3 py-2 text-white text-sm focus:border-vz_green focus:outline-none"
+              placeholder="Например: Любительский 3×3"
+            />
+          </label>
+
+          <label className="flex flex-col gap-2 text-sm">
+            <span className="text-white/70">Взнос / стоимость</span>
+            <input
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+              className="rounded-xl bg-black/30 border border-white/15 px-3 py-2 text-white text-sm focus:border-vz_green focus:outline-none"
+              placeholder="Например: 2000 ₽ с команды"
+            />
+          </label>
+
+          <label className="flex flex-col gap-2 text-sm">
+            <span className="text-white/70">Лимит команд</span>
+            <input
+              value={teamLimit}
+              onChange={(e) => setTeamLimit(e.target.value)}
+              type="number"
+              min={0}
+              className="rounded-xl bg-black/30 border border-white/15 px-3 py-2 text-white text-sm focus:border-vz_green focus:outline-none"
+              placeholder="Например: 12"
+            />
+          </label>
+        </div>
+
         <label className="flex flex-col gap-2 text-sm">
           <span className="text-white/70">Статус</span>
           <select
@@ -726,7 +794,7 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
                   {editingId === t.id ? (
                     <form
                       onSubmit={submitTournamentEdit}
-                      className="grid w-full gap-2 md:grid-cols-2 lg:grid-cols-3 text-xs"
+                      className="grid w-full gap-2 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 text-xs"
                     >
                       <label className="flex flex-col gap-1">
                         <span className="text-white/70">Название</span>
@@ -753,6 +821,35 @@ export function AdminPanel({ tournaments }: AdminPanelProps) {
                           onChange={(e) => setEditDateStart(e.target.value)}
                           className="rounded-lg bg-black/30 border border-white/15 px-3 py-2 text-white text-sm focus:border-vz_green focus:outline-none"
                           placeholder="Например: 12 октября 13:00"
+                        />
+                      </label>
+                      <label className="flex flex-col gap-1">
+                        <span className="text-white/70">Формат</span>
+                        <input
+                          value={editFormat}
+                          onChange={(e) => setEditFormat(e.target.value)}
+                          className="rounded-lg bg-black/30 border border-white/15 px-3 py-2 text-white text-sm focus:border-vz_green focus:outline-none"
+                          placeholder="Любительский 3×3"
+                        />
+                      </label>
+                      <label className="flex flex-col gap-1">
+                        <span className="text-white/70">Взнос / стоимость</span>
+                        <input
+                          value={editPrice}
+                          onChange={(e) => setEditPrice(e.target.value)}
+                          className="rounded-lg bg-black/30 border border-white/15 px-3 py-2 text-white text-sm focus:border-vz_green focus:outline-none"
+                          placeholder="2000 ₽ с команды"
+                        />
+                      </label>
+                      <label className="flex flex-col gap-1">
+                        <span className="text-white/70">Лимит команд</span>
+                        <input
+                          value={editTeamLimit}
+                          onChange={(e) => setEditTeamLimit(e.target.value)}
+                          type="number"
+                          min={0}
+                          className="rounded-lg bg-black/30 border border-white/15 px-3 py-2 text-white text-sm focus:border-vz_green focus:outline-none"
+                          placeholder="12"
                         />
                       </label>
                       <div className="flex items-center gap-2 md:col-span-2 lg:col-span-3 justify-end">

@@ -20,6 +20,9 @@ export default async function AdminPage() {
   const tournaments = fetchAllTournaments().map((t) => ({
     ...t,
     status: t.status ?? undefined,
+    format: t.settings?.format || null,
+    price: t.settings?.price ?? null,
+    teamLimit: t.settings?.teamLimit ?? null,
   }));
 
   return (
