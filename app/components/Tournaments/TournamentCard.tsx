@@ -20,6 +20,7 @@ interface TournamentCardProps {
   date?: string | null;
   place?: string | null;
   status: TournamentStatus | null;
+  format?: string;
   teamCount?: number;
   teamLimit?: number | null;
   price?: string | number | null;
@@ -51,6 +52,7 @@ export default function TournamentCard({
   date,
   place,
   status,
+  format,
   teamCount = 0,
   teamLimit,
   price,
@@ -75,6 +77,11 @@ export default function TournamentCard({
           <h3 className="text-lg md:text-xl font-semibold text-vz_text">
             {title}
           </h3>
+          {format ? (
+            <p className="text-[11px] md:text-xs text-vz_purple font-semibold mt-0.5">
+              {format}
+            </p>
+          ) : null}
           <p className="text-xs md:text-sm text-neutral-700 mt-1">
             {place || "Локация уточняется"}
           </p>
