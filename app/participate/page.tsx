@@ -12,11 +12,11 @@ export default async function ParticipatePage() {
   const telegramIdRaw = cookieStore.get("vzale_telegram_id")?.value;
   const telegramId = telegramIdRaw ? Number(telegramIdRaw) : null;
 
-  const openTournaments = fetchOpenTournaments().map((t) => ({
+  const openTournaments = (await fetchOpenTournaments()).map((t) => ({
     ...t,
     status: t.status ?? undefined,
   }));
-  const previousTeam = telegramId ? fetchLastTeamForCaptain(telegramId) : null;
+  const previousTeam = telegramId ? await fetchLastTeamForCaptain(telegramId) : null;
 
   const needsAuth = !telegramId;
 

@@ -1,13 +1,13 @@
 // app/me/page.tsx
 import Link from "next/link";
 import { cookies } from "next/headers";
-import { getDb } from "@/lib/db";
 import { isAdmin } from "@/lib/admin";
 import {
-  fetchAllTournaments,
   fetchLastTeamForCaptain,
-  TournamentRow as TournamentDbRow,
-} from "@/lib/tournaments";
+  fetchTournaments,
+  fetchUserProfile,
+  type TournamentSummary,
+} from "@/lib/api";
 import { TournamentSignup, TournamentOption } from "./components/TournamentSignup";
 
 type TeamMembership = {
@@ -62,20 +62,6 @@ type StatsSummary = {
   lastUpdated: string | null;
 };
 
-type PlayerMatchRow = {
-  matchId: number;
-  tournamentId: number | null;
-  teamName: string | null;
-  points: number | null;
-  assists: number | null;
-  rebounds: number | null;
-  threes: number | null;
-  scoreHome: number | null;
-  scoreAway: number | null;
-  stage: string | null;
-  groupName: string | null;
-};
-
 type AchievementRow = {
   code: string;
   title: string;
@@ -118,16 +104,6 @@ type ProfileData = {
   statsTotals: StatsSummary;
   recentMatches: RecentMatchRow[];
 };
-
-function safeJsonParse<T>(value: string | null): T | null {
-  if (!value) return null;
-  try {
-    return JSON.parse(value) as T;
-  } catch (err) {
-    console.error("[profile] failed to parse json", err);
-    return null;
-  }
-}
 
 function achievementTierLabel(tier: string) {
   switch (tier) {
@@ -265,259 +241,8 @@ function sparkline(values: number[]) {
   );
 }
 
-function getProfileData(telegramId: number): ProfileData {
-  const db = getDb();
-
-  const fullNameRow = db
-    .prepare("SELECT full_name FROM users WHERE user_id = ?")
-    .get(telegramId) as { full_name?: string } | undefined;
-
-  const memberships = db
-    .prepare(
-      `
-      SELECT
-        tm.team_id           AS teamId,
-        tm.role              AS role,
-        tm.status            AS memberStatus,
-        tn.name              AS teamName,
-        tn.captain_user_id   AS captainUserId,
-        tn.tournament_id     AS tournamentId,
-        tn.status            AS teamStatus,
-        t.name               AS tournamentName,
-        t.status             AS tournamentStatus,
-        ts.invite_code       AS inviteCode
-      FROM team_members tm
-      JOIN teams_new tn ON tn.id = tm.team_id
-      LEFT JOIN tournaments t ON t.id = tn.tournament_id
-      LEFT JOIN team_security_new ts
-        ON ts.team_id = tm.team_id AND ts.tournament_id = tn.tournament_id
-      WHERE tm.user_id = ?
-      ORDER BY tn.id DESC
-    `
-    )
-    .all(telegramId) as TeamMembership[];
-
-  const freeAgentRows = db
-    .prepare(
-      `
-      SELECT
-        fa.profile_json AS profileJson,
-        fa.is_active    AS isActive,
-        fa.tournament_id AS tournamentId,
-        t.name          AS tournamentName,
-        t.status        AS tournamentStatus
-      FROM free_agents_new fa
-      LEFT JOIN tournaments t ON t.id = fa.tournament_id
-      WHERE fa.user_id = ?
-      ORDER BY fa.id DESC
-    `
-    )
-    .all(telegramId) as {
-      profileJson: string | null;
-      isActive: number;
-      tournamentId: number | null;
-      tournamentName: string | null;
-      tournamentStatus: string | null;
-    }[];
-
-  const freeAgentProfiles: FreeAgentProfile[] = freeAgentRows.map((row) => {
-    const parsed = safeJsonParse<{ name?: string; info?: string }>(
-      row.profileJson
-    );
-    return {
-      tournamentId: row.tournamentId,
-      tournamentName: row.tournamentName,
-      tournamentStatus: row.tournamentStatus,
-      name: parsed?.name,
-      info: parsed?.info,
-      isActive: Boolean(row.isActive),
-    };
-  });
-
-  const payments = db
-    .prepare(
-      `
-        SELECT
-          pp.tournament_id AS tournamentId,
-          t.name           AS tournamentName,
-          pp.paid          AS paid
-      FROM player_payments pp
-      LEFT JOIN tournaments t ON t.id = pp.tournament_id
-      WHERE pp.user_id = ?
-    `
-    )
-    .all(telegramId) as PaymentRow[];
-
-  const achievements = db
-    .prepare(
-      `
-      SELECT
-        a.code,
-        a.title,
-        a.description,
-        a.emoji,
-        a.tier,
-        a.order_index AS orderIndex,
-        pa.awarded_at AS awardedAt,
-        pa.tournament_id AS tournamentId,
-        t.name AS tournamentName
-      FROM player_achievements pa
-      JOIN achievements a ON a.id = pa.achievement_id
-      LEFT JOIN tournaments t ON t.id = pa.tournament_id
-      WHERE pa.user_id = ?
-      ORDER BY COALESCE(pa.awarded_at, '') DESC, a.order_index ASC
-    `
-    )
-    .all(telegramId) as AchievementRow[];
-
-  const allAchievements = db
-    .prepare(
-      `
-      SELECT
-        a.code,
-        a.title,
-        a.description,
-        a.emoji,
-        a.tier,
-        a.order_index AS orderIndex,
-        NULL AS awardedAt,
-        NULL AS tournamentId,
-        NULL AS tournamentName
-      FROM achievements a
-      ORDER BY a.order_index ASC, a.id ASC
-    `
-    )
-    .all() as AchievementRow[];
-
-  const globalRating = db
-    .prepare(
-      `
-      SELECT rating, games, updated_at AS updatedAt
-      FROM player_ratings
-      WHERE user_id = ?
-    `
-    )
-    .get(telegramId) as RatingRow | undefined;
-
-  const tournamentRatings = db
-    .prepare(
-      `
-      SELECT
-        prt.tournament_id AS tournamentId,
-        t.name AS tournamentName,
-        prt.rating,
-        prt.games
-      FROM player_ratings_by_tournament prt
-      LEFT JOIN tournaments t ON t.id = prt.tournament_id
-      WHERE prt.user_id = ?
-      ORDER BY prt.rating DESC
-    `
-    )
-    .all(telegramId) as TournamentRatingRow[];
-
-  const statsTotals = db
-    .prepare(
-      `
-        SELECT
-          COALESCE(SUM(games), 0) AS games,
-          COALESCE(SUM(wins), 0) AS wins,
-          COALESCE(SUM(points), 0) AS points,
-          COALESCE(SUM(threes), 0) AS threes,
-          COALESCE(SUM(assists), 0) AS assists,
-          COALESCE(SUM(rebounds), 0) AS rebounds,
-          COALESCE(SUM(blocks), 0) AS blocks,
-          MAX(last_updated) AS lastUpdated
-        FROM player_stats
-        WHERE user_id = ?
-      `
-    )
-    .get(telegramId) as StatsSummary;
-
-  const recentMatchRows = db
-    .prepare(
-      `
-        SELECT
-          pms.match_id AS matchId,
-          pms.tournament_id AS tournamentId,
-          pms.team_name AS teamName,
-          pms.points,
-          pms.assists,
-          pms.rebounds,
-          pms.threes,
-          ms.team_home_name AS teamHomeName,
-          ms.team_away_name AS teamAwayName,
-          ms.score_home AS scoreHome,
-          ms.score_away AS scoreAway,
-          m.start_at AS startAt,
-          COALESCE(m.stage, ms.stage) AS stage,
-          m.group_name AS groupName
-        FROM player_match_stats pms
-        LEFT JOIN matches_simple ms ON ms.id = pms.match_id
-        LEFT JOIN matches m ON m.id = pms.match_id
-        WHERE pms.user_id = ?
-        ORDER BY COALESCE(m.start_at, ms.id) DESC
-        LIMIT 6
-      `
-    )
-    .all(telegramId) as (PlayerMatchRow & {
-      teamHomeName: string | null;
-      teamAwayName: string | null;
-      startAt: string | null;
-    })[];
-
-  const recentMatches: RecentMatchRow[] = recentMatchRows.map((row) => {
-    const teamName = row.teamName ?? "Без названия";
-    const isHome = (row.teamHomeName ?? "") === teamName;
-    const opponent = isHome ? row.teamAwayName : row.teamHomeName;
-    const opponentName = opponent ?? "Соперник уточняется";
-    const scoreHome = row.scoreHome ?? null;
-    const scoreAway = row.scoreAway ?? null;
-    const points = row.points ?? 0;
-    const assists = row.assists ?? 0;
-    const rebounds = row.rebounds ?? 0;
-    const threes = row.threes ?? 0;
-    let result: "win" | "loss" | "pending" = "pending";
-
-    if (scoreHome !== null && scoreAway !== null) {
-      const homeWon = scoreHome > scoreAway;
-      const awayWon = scoreAway > scoreHome;
-      if (homeWon || awayWon) {
-        const playerWon = isHome ? homeWon : awayWon;
-        result = playerWon ? "win" : "loss";
-      }
-    }
-
-    return {
-      matchId: row.matchId,
-      tournamentId: row.tournamentId,
-      stage: row.stage,
-      groupName: row.groupName,
-      startAt: row.startAt,
-      teamName,
-      opponentName,
-      scoreHome,
-      scoreAway,
-      isHome,
-      points,
-      assists,
-      rebounds,
-      threes,
-      result,
-    };
-  });
-
-  return {
-    fullName: fullNameRow?.full_name ?? null,
-    memberships,
-    freeAgentProfiles,
-    payments,
-    achievements,
-    allAchievements,
-    globalRating: globalRating ?? null,
-    tournamentRatings,
-    statsTotals,
-    recentMatches,
-  };
+async function getProfileData(telegramId: number): Promise<ProfileData | null> {
+  return fetchUserProfile<ProfileData>(telegramId);
 }
 
 function tournamentStatusLabel(status?: string | null) {
@@ -598,13 +323,34 @@ export default async function MePage() {
     );
   }
 
-  const profile = getProfileData(telegramId);
-  const tournaments = fetchAllTournaments() as TournamentDbRow[];
+  const profile = await getProfileData(telegramId);
+
+  if (!profile) {
+    return (
+      <main className="min-h-screen flex items-center justify-center bg-vz-gradient px-4">
+        <div className="bg-black/50 rounded-3xl p-8 w-full max-w-md text-center shadow-xl space-y-4">
+          <h1 className="text-2xl font-bold text-white">Не удалось загрузить профиль</h1>
+          <p className="text-sm text-white/70">
+            Мы не смогли получить данные из API. Попробуйте обновить страницу или
+            убедитесь, что переменная окружения API_URL настроена корректно.
+          </p>
+          <Link
+            href="/"
+            className="inline-flex items-center justify-center rounded-full px-5 py-2 text-sm font-semibold bg-white/15 text-white border border-white/20 hover:bg-white/25 transition"
+          >
+            На главную
+          </Link>
+        </div>
+      </main>
+    );
+  }
+
+  const tournaments = (await fetchTournaments()) ?? [];
   const openTournaments = tournaments.filter(
     (t) => t.status === "registration_open"
-  ) as TournamentOption[];
+  ) as (TournamentOption & TournamentSummary)[];
   const adminMode = isAdmin(telegramId);
-  const previousTeam = fetchLastTeamForCaptain(telegramId);
+  const previousTeam = await fetchLastTeamForCaptain(telegramId);
 
   const tournamentsFromTeams = profile.memberships
     .map((m) => m.tournamentId)

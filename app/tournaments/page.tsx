@@ -1,18 +1,10 @@
 import Link from "next/link";
 
-import { getDb } from "@/lib/db";
+import { fetchTournaments, type TournamentSummary } from "@/lib/api";
 import TournamentCard from "../components/Tournaments/TournamentCard";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
-
-type TournamentRow = {
-  id: number;
-  name: string;
-  status: string | null;
-  dateStart: string | null;
-  venue: string | null;
-};
 
 const statusPriority: Record<string, number> = {
   registration_open: 1,
@@ -23,15 +15,6 @@ const statusPriority: Record<string, number> = {
   finished: 6,
   archived: 7,
 };
-
-function fetchTournaments(): TournamentRow[] {
-  const db = getDb();
-  return db
-    .prepare(
-      "SELECT id, name, status, date_start as dateStart, venue FROM tournaments ORDER BY id DESC"
-    )
-    .all() as TournamentRow[];
-}
 
 function normalizeStatus(status: string | null):
   | "draft"
@@ -66,15 +49,15 @@ function normalizeStatus(status: string | null):
   return null;
 }
 
-export default function TournamentsPage() {
-  const tournaments = fetchTournaments().sort((a, b) => {
+export default async function TournamentsPage() {
+  const tournaments = (await fetchTournaments())?.sort((a, b) => {
     const aStatus = normalizeStatus(a.status) ?? "draft";
     const bStatus = normalizeStatus(b.status) ?? "draft";
     const aPriority = statusPriority[aStatus] ?? 99;
     const bPriority = statusPriority[bStatus] ?? 99;
     if (aPriority === bPriority) return b.id - a.id;
     return aPriority - bPriority;
-  });
+  }) ?? [] as TournamentSummary[];
 
   return (
     <main className="min-h-screen w-full bg-vz-gradient py-20 px-6 md:px-10">
